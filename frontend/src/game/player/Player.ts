@@ -32,6 +32,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   readonly vitals: Vitals
   facing: 1 | -1 = 1
 
+  /** Set by the sync layer so casts/melee replicate to the other tab. */
+  onCastPerformed?: (ability: ReturnType<typeof selectAbility>, aim: { x: number; y: number }, moveDir: -1 | 0 | 1) => void
+  onMeleePerformed?: (aim: { x: number; y: number }, comboStep: number) => void
+
   private readonly keys: PlayerKeys
   private readonly projectiles: Phaser.Physics.Arcade.Group
   private readonly attacks = buildAttackRegistry()
@@ -45,6 +49,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private comboResetAt = 0
   private gravityDisabled = false
   private firePlunging = false
+  private controlled = true
 
   constructor(scene: Phaser.Scene, x: number, y: number,
       projectiles: Phaser.Physics.Arcade.Group, potions: number) {
@@ -77,6 +82,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     scene.input.mouse?.disableContextMenu()
     scene.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (!this.controlled) return
       if (pointer.rightButtonDown()) {
         this.tryCast()
       } else if (pointer.leftButtonDown()) {
@@ -91,6 +97,45 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   get isInvulnerable(): boolean {
     return this.scene.time.now < this.invulnerableUntil || this.isDashing
+  }
+
+  /** Puppet mode: physics off, position driven by the other tab's poses. */
+  setControlled(controlled: boolean): void {
+    if (this.controlled === controlled) return
+    this.controlled = controlled
+    const body = this.body as Phaser.Physics.Arcade.Body
+    body.moves = controlled
+    if (controlled) {
+      this.setVelocity(0, 0)
+    }
+  }
+
+  get isControlled(): boolean {
+    return this.controlled
+  }
+
+  applyRemotePose(x: number, y: number, facing: 1 | -1): void {
+    this.setPosition(x, y)
+    this.facing = facing
+    this.setFlipX(facing === -1)
+  }
+
+  /** Replays a cast from the other tab; mana is owned by the controller. */
+  castRemote(ability: ReturnType<typeof selectAbility>, aim: { x: number; y: number },
+      moveDir: -1 | 0 | 1): void {
+    const pattern = this.attacks.get(ability)
+    if (!pattern) return
+    pattern.cast({
+      scene: this.scene,
+      player: this,
+      aim: new Phaser.Math.Vector2(aim.x, aim.y),
+      moveDir,
+      projectiles: this.projectiles,
+    })
+  }
+
+  meleeRemote(aim: { x: number; y: number }, comboStep: number): void {
+    this.spawnSlash(new Phaser.Math.Vector2(aim.x, aim.y), comboStep)
   }
 
   currentMoveDir(): -1 | 0 | 1 {
@@ -139,6 +184,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Heal bubble visual follows the vitals state.
     this.bubble.setVisible(this.vitals.healBubbleActive)
     this.bubble.setPosition(this.x, this.y)
+
+    // Puppet tabs render only; the controlling tab owns input and physics.
+    if (!this.controlled) return
 
     const body = this.body as Phaser.Physics.Arcade.Body
 
@@ -211,12 +259,17 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.lockFor(160)
 
     const aim = this.aimVector()
-    const damage = COMBO_DAMAGE[this.comboStep - 1]
+    this.spawnSlash(aim, this.comboStep)
+    this.onMeleePerformed?.({ x: aim.x, y: aim.y }, this.comboStep)
+  }
+
+  private spawnSlash(aim: Phaser.Math.Vector2, comboStep: number): void {
+    const damage = COMBO_DAMAGE[Math.min(comboStep, 3) - 1]
     const slash = this.projectiles.create(
       this.x + aim.x * 34, this.y + aim.y * 34, TEX.spark) as Phaser.Physics.Arcade.Image
     slash.setData('damage', damage)
     slash.setData('melee', true)
-    slash.setScale(this.comboStep === 3 ? 2.6 : 1.8).setAlpha(0.85)
+    slash.setScale(comboStep === 3 ? 2.6 : 1.8).setAlpha(0.85)
     slash.setRotation(aim.angle())
     ;(slash.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
     this.scene.time.delayedCall(110, () => slash.destroy())
@@ -235,14 +288,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const pattern = this.attacks.get(ability)
     if (!pattern || !this.vitals.spendMana(pattern.manaCost)) return
 
+    const aim = this.aimVector()
     const ctx: CastContext = {
       scene: this.scene,
       player: this,
-      aim: this.aimVector(),
+      aim,
       moveDir,
       projectiles: this.projectiles,
     }
     pattern.cast(ctx)
+    this.onCastPerformed?.(ability, { x: aim.x, y: aim.y }, moveDir)
   }
 
   destroy(fromScene?: boolean): void {

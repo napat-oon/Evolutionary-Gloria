@@ -1,22 +1,44 @@
-import { useCallback, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../app/api'
 import type { UserResponse } from '../app/api'
 import { useAuth } from '../app/AuthContext'
 import PhaserGame from '../game/core/PhaserGame'
+import { otherTab, TAB_BOSS_COLOR } from '../game/sync/messages'
+import type { TabId } from '../game/sync/messages'
+import { BroadcastChannelTransport } from '../game/sync/SyncTransport'
+import { TabSync } from '../game/sync/TabSync'
 
 const POTION_PRICE = 50
 
 export default function GamePage() {
   const { user, refreshUser } = useAuth()
+  const [searchParams] = useSearchParams()
+  const tab: TabId = searchParams.get('tab') === '2' ? 2 : 1
+
   const [shopOpen, setShopOpen] = useState(false)
   const [shopError, setShopError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [potions, setPotions] = useState(user?.potions ?? 0)
   const [points, setPoints] = useState(user?.points ?? 0)
+  const [alertColor, setAlertColor] = useState<string | null>(null)
+  const alertTimer = useRef<number | null>(null)
+
+  // One sync session per mounted game page.
+  const tabSync = useMemo(() => new TabSync(tab, new BroadcastChannelTransport()), [tab])
+  useEffect(() => () => tabSync.dispose(), [tabSync])
 
   const onShopOpen = useCallback(() => setShopOpen(true), [])
   const onPotionsUsed = useCallback((remaining: number) => setPotions(remaining), [])
+  const onWindup = useCallback((color: string) => {
+    setAlertColor(color)
+    if (alertTimer.current) window.clearTimeout(alertTimer.current)
+    alertTimer.current = window.setTimeout(() => setAlertColor(null), 900)
+  }, [])
+
+  function openOtherTab() {
+    window.open(`/game?tab=${otherTab(tab)}`, '_blank')
+  }
 
   async function buyPotion() {
     setBusy(true)
@@ -38,13 +60,37 @@ export default function GamePage() {
   return (
     <main className="game-page">
       <header className="game-topbar">
-        <Link className="button-link secondary" to="/lobby">
-          ← Lobby
-        </Link>
-        <span className="game-points">✦ {points} points</span>
+        <div className="game-topbar-left">
+          <button className="secondary" onClick={openOtherTab}>
+            ⧉ Open Dimension {otherTab(tab)}
+          </button>
+          <span className="dimension-badge" style={{ color: TAB_BOSS_COLOR[tab] }}>
+            {tab === 1 ? "Sirius's Dimension" : "Orion's Dimension"}
+          </span>
+        </div>
+        <div className="game-topbar-left">
+          <span className="game-points">✦ {points} points</span>
+          <Link className="button-link secondary" to="/lobby">
+            Lobby
+          </Link>
+        </div>
       </header>
 
-      <PhaserGame potions={potions} onShopOpen={onShopOpen} onPotionsUsed={onPotionsUsed} />
+      <PhaserGame
+        potions={potions}
+        tabSync={tabSync}
+        onShopOpen={onShopOpen}
+        onPotionsUsed={onPotionsUsed}
+        onWindup={onWindup}
+      />
+
+      {alertColor && (
+        <div
+          className="edge-alert"
+          style={{ boxShadow: `inset 0 0 70px 22px ${alertColor}` }}
+          aria-hidden
+        />
+      )}
 
       {shopOpen && (
         <div className="shop-overlay" role="dialog">

@@ -1,6 +1,8 @@
 import Phaser from 'phaser'
 import { TEX } from '../core/textures'
 import { Player } from '../player/Player'
+import { SceneSync } from '../sync/SceneSync'
+import type { TabSync } from '../sync/TabSync'
 
 const WIDTH = 960
 const HEIGHT = 540
@@ -35,9 +37,15 @@ export class BossRoomScene extends Phaser.Scene {
       (this.registry.get('potions') as number | undefined) ?? 0)
     this.physics.add.collider(this.player, solids)
 
+    const tabSync = this.registry.get('tabsync') as TabSync | undefined
+    if (tabSync) {
+      new SceneSync(this, this.player, tabSync)
+    }
+
+    const bossName = tabSync?.tab === 2 ? 'ORION' : 'SIRIUS'
     this.add
-      .text(WIDTH / 2, 180, 'SIRIUS & ORION\nawait their cue…', {
-        fontSize: '24px', color: '#4b4370', align: 'center',
+      .text(WIDTH / 2, 180, `${bossName}\nawaits their cue…`, {
+        fontSize: '24px', color: tabSync?.tab === 2 ? '#6b2a3a' : '#2a6b47', align: 'center',
       })
       .setOrigin(0.5)
 

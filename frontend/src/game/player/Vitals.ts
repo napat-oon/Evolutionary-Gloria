@@ -97,6 +97,15 @@ export class Vitals {
     this.emit()
   }
 
+  /** Overwrites local state from the controlling tab's snapshot (single writer). */
+  applySnapshot(snapshot: VitalsSnapshot): void {
+    this.hp = snapshot.hp
+    this.mana = snapshot.mana
+    this.potions = snapshot.potions
+    this.bubblePoppedFor = snapshot.healBubbleActive ? 0 : Math.max(this.bubblePoppedFor, 0.05)
+    this.emit()
+  }
+
   snapshot(): VitalsSnapshot {
     return {
       hp: this.hp,

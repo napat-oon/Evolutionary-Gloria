@@ -1,6 +1,8 @@
 import Phaser from 'phaser'
 import { TEX } from '../core/textures'
 import { Player } from '../player/Player'
+import { SceneSync } from '../sync/SceneSync'
+import type { TabSync } from '../sync/TabSync'
 
 const WORLD_WIDTH = 1920
 const WORLD_HEIGHT = 540
@@ -50,6 +52,11 @@ export class IntermissionScene extends Phaser.Scene {
       () => !this.player.passesThroughPlatforms, this)
 
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12)
+
+    const tabSync = this.registry.get('tabsync') as TabSync | undefined
+    if (tabSync) {
+      new SceneSync(this, this.player, tabSync)
+    }
 
     // Shop pad
     this.add.image(300, GROUND_Y - 5, TEX.shopPad)
