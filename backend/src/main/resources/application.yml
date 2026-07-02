@@ -12,6 +12,14 @@ spring:
   flyway:
     enabled: true
 
+gloria:
+  jwt:
+    # Override JWT_SECRET in every real environment; must be at least 32 bytes.
+    secret: ${JWT_SECRET:local-dev-only-secret-0123456789abcdefghijklmnop}
+    access-ttl: 30m
+    refresh-ttl: 7d
+    secure-cookies: ${COOKIE_SECURE:false}
+
 management:
   endpoints:
     web:

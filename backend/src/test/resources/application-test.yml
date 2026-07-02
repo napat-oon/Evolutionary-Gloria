@@ -1,3 +1,7 @@
+gloria:
+  rate-limit:
+    auth-per-minute: 10000
+
 spring:
   datasource:
     url: jdbc:h2:mem:gloria-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
