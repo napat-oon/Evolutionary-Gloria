@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './AuthContext'
 import ProtectedRoute from './ProtectedRoute'
@@ -7,7 +8,9 @@ import ForgotPasswordPage from '../pages/ForgotPasswordPage'
 import ResetPasswordPage from '../pages/ResetPasswordPage'
 import LobbyPage from '../pages/LobbyPage'
 import LeaderboardPage from '../pages/LeaderboardPage'
-import GamePage from '../pages/GamePage'
+
+// Phaser is heavy; only load it when the player actually enters the game.
+const GamePage = lazy(() => import('../pages/GamePage'))
 
 export default function App() {
   return (
@@ -21,7 +24,14 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route path="/lobby" element={<LobbyPage />} />
           <Route path="/leaderboard" element={<LeaderboardPage />} />
-          <Route path="/game" element={<GamePage />} />
+          <Route
+            path="/game"
+            element={
+              <Suspense fallback={<main className="page">Loading game…</main>}>
+                <GamePage />
+              </Suspense>
+            }
+          />
         </Route>
       </Routes>
     </AuthProvider>
