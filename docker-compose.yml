@@ -1,0 +1,24 @@
+# Local development database. Backend and frontend run on the host:
+#   cd backend && mvn spring-boot:run          (uses this postgres)
+#   cd frontend && npm run dev                 (proxies /api to :8080)
+# Without Docker, run the backend with the dev profile (H2 in-memory):
+#   cd backend && mvn spring-boot:run -Dspring-boot.run.profiles=dev
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: gloria
+      POSTGRES_USER: gloria
+      POSTGRES_PASSWORD: gloria
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gloria -d gloria"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

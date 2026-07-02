@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: evolutionary-gloria
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:gloria}
+    username: ${POSTGRES_USER:gloria}
+    password: ${POSTGRES_PASSWORD:gloria}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+server:
+  port: 8080
