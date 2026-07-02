@@ -6,6 +6,8 @@ import RegisterPage from '../pages/RegisterPage'
 import ForgotPasswordPage from '../pages/ForgotPasswordPage'
 import ResetPasswordPage from '../pages/ResetPasswordPage'
 import LobbyPage from '../pages/LobbyPage'
+import LeaderboardPage from '../pages/LeaderboardPage'
+import GamePage from '../pages/GamePage'
 
 export default function App() {
   return (
@@ -18,6 +20,8 @@ export default function App() {
         <Route path="/reset" element={<ResetPasswordPage />} />
         <Route element={<ProtectedRoute />}>
           <Route path="/lobby" element={<LobbyPage />} />
+          <Route path="/leaderboard" element={<LeaderboardPage />} />
+          <Route path="/game" element={<GamePage />} />
         </Route>
       </Routes>
     </AuthProvider>
