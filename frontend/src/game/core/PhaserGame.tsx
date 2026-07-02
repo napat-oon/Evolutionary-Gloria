@@ -13,6 +13,8 @@ interface PhaserGameProps {
   onShopOpen: () => void
   onPotionsUsed?: (remaining: number) => void
   onWindup?: (color: string) => void
+  onMatchStart?: () => void
+  onMatchFinished?: (victory: boolean) => void
 }
 
 /** Mounts the Phaser game and bridges its events into React. */
@@ -22,6 +24,8 @@ export default function PhaserGame({
   onShopOpen,
   onPotionsUsed,
   onWindup,
+  onMatchStart,
+  onMatchFinished,
 }: PhaserGameProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
@@ -50,6 +54,8 @@ export default function PhaserGame({
     game.events.on('shop:open', onShopOpen)
     if (onPotionsUsed) game.events.on('potions:used', onPotionsUsed)
     if (onWindup) game.events.on('sync:windup', onWindup)
+    if (onMatchStart) game.events.on('match:start', onMatchStart)
+    if (onMatchFinished) game.events.on('match:finished', onMatchFinished)
     gameRef.current = game
 
     // Whichever tab the user is looking at controls the character.

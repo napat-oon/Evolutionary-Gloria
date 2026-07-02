@@ -1,8 +1,11 @@
 import type {
+  BossHpMessage,
   CastMessage,
   DamageMessage,
+  FightMessage,
   MeleeMessage,
   PoseMessage,
+  StarMessage,
   SyncMessage,
   TabId,
   WindupMessage,
@@ -17,6 +20,9 @@ export interface TabSyncHandlers {
   onWindup?: (message: WindupMessage) => void
   onDamage?: (message: DamageMessage) => void
   onControlChange?: (hasControl: boolean) => void
+  onBossHp?: (message: BossHpMessage) => void
+  onStar?: (message: StarMessage) => void
+  onFight?: (message: FightMessage) => void
 }
 
 /**
@@ -82,6 +88,19 @@ export class TabSync {
     return false
   }
 
+  publishBossHp(hp: number, maxHp: number): void {
+    this.transport.post({ type: 'boss-hp', tab: this.tab, hp, maxHp })
+  }
+
+  publishStar(color: StarMessage['color']): void {
+    const eventId = `${this.tab}-star-${Date.now()}-${this.damageCounter++}`
+    this.transport.post({ type: 'star', tab: this.tab, color, eventId })
+  }
+
+  publishFight(phase: FightMessage['phase']): void {
+    this.transport.post({ type: 'fight', tab: this.tab, phase })
+  }
+
   dispose(): void {
     this.unsubscribe()
     this.transport.close()
@@ -107,6 +126,15 @@ export class TabSync {
         break
       case 'windup':
         this.handlers.onWindup?.(message)
+        break
+      case 'boss-hp':
+        this.handlers.onBossHp?.(message)
+        break
+      case 'star':
+        this.handlers.onStar?.(message)
+        break
+      case 'fight':
+        this.handlers.onFight?.(message)
         break
       case 'damage':
         if (this.controlling && !this.seenDamageIds.has(message.eventId)) {

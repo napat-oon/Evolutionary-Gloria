@@ -1,3 +1,4 @@
+import type { StarColor } from '../bosses/ConstellationTracker'
 import type { AbilityId } from '../core/intents'
 import type { VitalsSnapshot } from '../player/Vitals'
 
@@ -61,6 +62,29 @@ export interface ControlMessage {
   tab: TabId
 }
 
+/** The twins share one HP pool; the controlling tab broadcasts changes. */
+export interface BossHpMessage {
+  type: 'boss-hp'
+  tab: TabId
+  hp: number
+  maxHp: number
+}
+
+/** A special attack added (or failed to add) a constellation star. */
+export interface StarMessage {
+  type: 'star'
+  tab: TabId
+  color: StarColor
+  eventId: string
+}
+
+/** Fight lifecycle mirrored across tabs. */
+export interface FightMessage {
+  type: 'fight'
+  tab: TabId
+  phase: 'intro' | 'start' | 'ultimate' | 'victory' | 'defeat'
+}
+
 export type SyncMessage =
   | PoseMessage
   | CastMessage
@@ -68,8 +92,13 @@ export type SyncMessage =
   | WindupMessage
   | DamageMessage
   | ControlMessage
+  | BossHpMessage
+  | StarMessage
+  | FightMessage
 
-const MESSAGE_TYPES = new Set(['pose', 'cast', 'melee', 'windup', 'damage', 'control'])
+const MESSAGE_TYPES = new Set([
+  'pose', 'cast', 'melee', 'windup', 'damage', 'control', 'boss-hp', 'star', 'fight',
+])
 
 export function isSyncMessage(value: unknown): value is SyncMessage {
   if (typeof value !== 'object' || value === null) return false

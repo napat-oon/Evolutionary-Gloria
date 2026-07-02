@@ -20,6 +20,13 @@ export const TEX = {
   shopPad: 'tex-shop-pad',
   door: 'tex-door',
   dummy: 'tex-dummy',
+  boss: 'tex-boss',
+  scythe: 'tex-scythe',
+  wave: 'tex-wave',
+  shell: 'tex-shell',
+  blackhole: 'tex-blackhole',
+  smoke: 'tex-smoke',
+  starDot: 'tex-star-dot',
 } as const
 
 export function makePlaceholderTextures(scene: Phaser.Scene): void {
@@ -119,6 +126,53 @@ export function makePlaceholderTextures(scene: Phaser.Scene): void {
     g.fillRoundedRect(4, 4, 20, 32, 6)
     g.fillStyle(0x6d7498)
     g.fillRect(12, 36, 4, 4)
+  })
+
+  make(TEX.boss, 44, 64, () => {
+    g.fillStyle(0xffffff) // tinted per boss (jade/crimson)
+    g.fillRoundedRect(8, 8, 28, 48, 10)
+    g.fillTriangle(8, 14, 22, 0, 36, 14) // hood
+    g.fillStyle(0x0b0d17)
+    g.fillCircle(17, 22, 3) // eyes
+    g.fillCircle(27, 22, 3)
+  })
+
+  make(TEX.scythe, 40, 40, () => {
+    g.lineStyle(4, 0xd8dcf0)
+    g.beginPath()
+    g.arc(20, 14, 14, Math.PI * 0.1, Math.PI * 0.9)
+    g.strokePath()
+    g.lineStyle(3, 0x8b93b8)
+    g.lineBetween(20, 14, 20, 40)
+  })
+
+  make(TEX.wave, 34, 16, () => {
+    g.fillStyle(0xffffff, 0.9) // tinted per boss
+    g.fillEllipse(17, 8, 32, 12)
+  })
+
+  make(TEX.shell, 64, 80, () => {
+    g.lineStyle(3, 0xffffff, 0.9) // tinted red/green
+    g.strokeEllipse(32, 40, 58, 74)
+  })
+
+  make(TEX.blackhole, 36, 36, () => {
+    g.fillStyle(0x1a0b12)
+    g.fillCircle(18, 18, 15)
+    g.lineStyle(3, 0xe4556e, 0.9)
+    g.strokeCircle(18, 18, 16)
+  })
+
+  make(TEX.smoke, 48, 48, () => {
+    g.fillStyle(0xffffff, 0.25) // tinted per boss
+    g.fillCircle(24, 24, 20)
+    g.fillCircle(12, 30, 12)
+    g.fillCircle(36, 30, 12)
+  })
+
+  make(TEX.starDot, 12, 12, () => {
+    g.fillStyle(0xffffff)
+    g.fillCircle(6, 6, 4)
   })
 
   g.destroy()

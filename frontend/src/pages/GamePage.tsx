@@ -8,8 +8,15 @@ import { otherTab, TAB_BOSS_COLOR } from '../game/sync/messages'
 import type { TabId } from '../game/sync/messages'
 import { BroadcastChannelTransport } from '../game/sync/SyncTransport'
 import { TabSync } from '../game/sync/TabSync'
+import { formatDuration } from '../lib/format'
 
 const POTION_PRICE = 50
+
+interface MatchResultView {
+  victory: boolean
+  pointsEarned: number
+  durationMs: number
+}
 
 export default function GamePage() {
   const { user, refreshUser } = useAuth()
@@ -23,6 +30,8 @@ export default function GamePage() {
   const [points, setPoints] = useState(user?.points ?? 0)
   const [alertColor, setAlertColor] = useState<string | null>(null)
   const alertTimer = useRef<number | null>(null)
+  const matchIdRef = useRef<number | null>(null)
+  const [result, setResult] = useState<MatchResultView | null>(null)
 
   // One sync session per mounted game page.
   const tabSync = useMemo(() => new TabSync(tab, new BroadcastChannelTransport()), [tab])
@@ -39,6 +48,44 @@ export default function GamePage() {
   function openOtherTab() {
     window.open(`/game?tab=${otherTab(tab)}`, '_blank')
   }
+
+  // Tab 1 owns the server-side match lifecycle (the game emits only there).
+  const onMatchStart = useCallback(() => {
+    api
+      .post<{ matchId: number }>('/api/match/start')
+      .then((response) => {
+        matchIdRef.current = response.matchId
+      })
+      .catch(() => {
+        matchIdRef.current = null
+      })
+  }, [])
+
+  const onMatchFinished = useCallback(
+    (victory: boolean) => {
+      const matchId = matchIdRef.current
+      matchIdRef.current = null
+      if (matchId === null) {
+        setResult({ victory, pointsEarned: 0, durationMs: 0 })
+        return
+      }
+      api
+        .post<{ victory: boolean; durationMs: number; pointsEarned: number }>(
+          '/api/match/complete',
+          { matchId, victory },
+        )
+        .then((response) => {
+          setResult({
+            victory: response.victory,
+            pointsEarned: response.pointsEarned,
+            durationMs: response.durationMs,
+          })
+          return refreshUser()
+        })
+        .catch(() => setResult({ victory, pointsEarned: 0, durationMs: 0 }))
+    },
+    [refreshUser],
+  )
 
   async function buyPotion() {
     setBusy(true)
@@ -82,7 +129,40 @@ export default function GamePage() {
         onShopOpen={onShopOpen}
         onPotionsUsed={onPotionsUsed}
         onWindup={onWindup}
+        onMatchStart={onMatchStart}
+        onMatchFinished={onMatchFinished}
       />
+
+      {result && (
+        <div className="shop-overlay" role="dialog">
+          <div className="shop-modal result-modal">
+            <h2>{result.victory ? 'VICTORY' : 'DEFEAT'}</h2>
+            {tab === 1 ? (
+              <p>
+                {result.victory
+                  ? 'The Twin Constellations fall silent.'
+                  : 'The twins remain… for now.'}
+                <br />
+                Points earned: <strong>✦ {result.pointsEarned}</strong>
+                {result.durationMs > 0 && (
+                  <>
+                    <br />
+                    Time: {formatDuration(result.durationMs)}
+                  </>
+                )}
+              </p>
+            ) : (
+              <p>The outcome echoes from the other dimension.</p>
+            )}
+            <div className="shop-actions">
+              <button onClick={() => window.location.reload()}>Fight again</button>
+              <Link className="button-link secondary" to="/lobby">
+                Back to lobby
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {alertColor && (
         <div
