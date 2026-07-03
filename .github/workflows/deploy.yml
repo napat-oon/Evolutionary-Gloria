@@ -49,8 +49,14 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
           mkdir -p ~/.ssh
-          echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          # Strip CRs (Windows paste) and guarantee a trailing newline —
+          # OpenSSH rejects the key with 'error in libcrypto' otherwise.
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          if ! ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null 2>&1; then
+            echo "::error::DEPLOY_SSH_KEY secret is not a valid private key. Paste the FULL private key file (including the BEGIN/END lines), e.g. ~/.ssh/id_ed25519 — not the .pub file."
+            exit 1
+          fi
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
       - name: Ship images to droplet
