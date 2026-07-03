@@ -6,7 +6,10 @@ COPY src ./src
 RUN mvn -B -q package -DskipTests
 
 FROM eclipse-temurin:21-jre-alpine
-RUN addgroup -S gloria && adduser -S gloria -G gloria
+# Patch OS packages: base images lag behind Alpine security fixes
+# (Trivy gates the deploy on HIGH/CRITICAL CVEs).
+RUN apk --no-cache upgrade \
+    && addgroup -S gloria && adduser -S gloria -G gloria
 USER gloria
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
