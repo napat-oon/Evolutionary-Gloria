@@ -20,15 +20,11 @@ services:
   backend:
     image: gloria-backend:latest
     restart: unless-stopped
-    # Small-droplet sizing: bound the JVM so the kernel OOM killer does not
-    # cut it down mid-startup (Spring's context refresh is the memory peak).
-    mem_limit: 512m
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       COOKIE_SECURE: "true"
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=50.0 -XX:+UseSerialGC -Xss512k -XX:MaxMetaspaceSize=160m"
     depends_on:
       postgres:
         condition: service_healthy
