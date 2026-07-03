@@ -19,7 +19,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Build backend image
         run: docker build -t gloria-backend:latest backend
@@ -28,7 +28,7 @@ jobs:
         run: docker build -t gloria-web:latest frontend
 
       - name: Trivy scan backend image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: gloria-backend:latest
           severity: HIGH,CRITICAL
@@ -36,7 +36,7 @@ jobs:
           ignore-unfixed: 'true'
 
       - name: Trivy scan web image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: gloria-web:latest
           severity: HIGH,CRITICAL

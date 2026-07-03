@@ -20,7 +20,8 @@ export interface PlayerKeys {
   down: Phaser.Input.Keyboard.Key
   jump: Phaser.Input.Keyboard.Key
   dash: Phaser.Input.Keyboard.Key
-  ctrl: Phaser.Input.Keyboard.Key
+  /** V — the elemental-variant modifier (Ctrl clashes with browser shortcuts). */
+  modifier: Phaser.Input.Keyboard.Key
   potion: Phaser.Input.Keyboard.Key
 }
 
@@ -76,7 +77,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       down: keyboard.addKey('S'),
       jump: keyboard.addKey('SPACE'),
       dash: keyboard.addKey('SHIFT'),
-      ctrl: keyboard.addKey('CTRL'),
+      modifier: keyboard.addKey('V'),
       potion: keyboard.addKey('R'),
     }
 
@@ -280,7 +281,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (time < this.lockedUntil) return
     const moveDir = this.currentMoveDir()
     const ability = selectAbility({
-      ctrl: this.keys.ctrl.isDown,
+      ctrl: this.keys.modifier.isDown,
       movingX: moveDir !== 0,
       up: this.keys.up.isDown,
       down: this.keys.down.isDown,

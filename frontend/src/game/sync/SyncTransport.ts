@@ -14,6 +14,7 @@ export interface SyncTransport {
 export class BroadcastChannelTransport implements SyncTransport {
   private readonly channel: BroadcastChannel
   private readonly listeners = new Set<(message: SyncMessage) => void>()
+  private closed = false
 
   constructor(channelName = 'gloria-tab-sync') {
     this.channel = new BroadcastChannel(channelName)
@@ -26,6 +27,9 @@ export class BroadcastChannelTransport implements SyncTransport {
   }
 
   post(message: SyncMessage): void {
+    // A frame can still be in flight while React unmounts; never throw
+    // into the game loop over a closed channel.
+    if (this.closed) return
     this.channel.postMessage(message)
   }
 
@@ -35,6 +39,8 @@ export class BroadcastChannelTransport implements SyncTransport {
   }
 
   close(): void {
+    if (this.closed) return
+    this.closed = true
     this.listeners.clear()
     this.channel.close()
   }

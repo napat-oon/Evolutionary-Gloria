@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# One-time droplet setup for Evolutionary Gloria. Run as root:
-#   DOMAIN=ssc-gameproject.dranon-todolist.me EMAIL=you@example.com bash setup-droplet.sh
+# One-time droplet setup for Evolutionary Gloria. Run with sudo:
+#   sudo DOMAIN=ssc-gameproject.dranon-todolist.me EMAIL=you@example.com \
+#     DEPLOY_USER=<the user the Deploy workflow SSHes in as> bash setup-droplet.sh
 set -euo pipefail
 
 DOMAIN="${DOMAIN:-ssc-gameproject.dranon-todolist.me}"
-EMAIL="${EMAIL:?Set EMAIL=your-email for Let's Encrypt registration}"
+EMAIL="${EMAIL:?Set EMAIL=your-email for Lets Encrypt registration}"
+# The deploy workflow runs docker and writes /opt/gloria as this (non-root) user.
+DEPLOY_USER="${DEPLOY_USER:-${SUDO_USER:-}}"
 
 echo "== Installing Docker =="
 if ! command -v docker >/dev/null; then
@@ -21,7 +24,13 @@ ufw --force enable
 echo "== App directory =="
 mkdir -p /opt/gloria
 
-echo "== Initial Let's Encrypt certificate (standalone, port 80 must be free) =="
+if [ -n "$DEPLOY_USER" ]; then
+  echo "== Granting $DEPLOY_USER docker access and /opt/gloria ownership =="
+  usermod -aG docker "$DEPLOY_USER"
+  chown "$DEPLOY_USER": /opt/gloria
+fi
+
+echo "== Initial Lets Encrypt certificate (standalone, port 80 must be free) =="
 if [ ! -e "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
   docker run --rm -p 80:80 \
     -v /etc/letsencrypt:/etc/letsencrypt \

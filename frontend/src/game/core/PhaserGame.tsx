@@ -10,6 +10,7 @@ import type { IntermissionScene as IntermissionSceneType } from '../scenes/Inter
 interface PhaserGameProps {
   potions: number
   tabSync: TabSync
+  paused?: boolean
   onShopOpen: () => void
   onPotionsUsed?: (remaining: number) => void
   onWindup?: (color: string) => void
@@ -21,6 +22,7 @@ interface PhaserGameProps {
 export default function PhaserGame({
   potions,
   tabSync,
+  paused = false,
   onShopOpen,
   onPotionsUsed,
   onWindup,
@@ -71,6 +73,16 @@ export default function PhaserGame({
     // The game is created once; live updates flow through setPotions below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    const game = gameRef.current
+    if (!game) return
+    if (paused) {
+      game.loop.sleep()
+    } else {
+      game.loop.wake()
+    }
+  }, [paused])
 
   useEffect(() => {
     const game = gameRef.current

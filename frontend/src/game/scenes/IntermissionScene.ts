@@ -94,7 +94,7 @@ export class IntermissionScene extends Phaser.Scene {
     })
 
     this.add
-      .text(120, 340, 'A/D move · SPACE jump · SHIFT dash · LMB combo\nRMB elemental (hold W/S/move or CTRL for variants) · R potion',
+      .text(120, 340, 'A/D move · SPACE jump · SHIFT dash · LMB combo\nRMB elemental (hold W/S/move for variants, V for the second set) · R potion',
         { fontSize: '12px', color: '#5b6180', align: 'left' })
 
     this.events.on('player:potion', (remaining: number) => {

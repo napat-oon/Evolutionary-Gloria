@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../app/api'
 import type { UserResponse } from '../app/api'
 import { useAuth } from '../app/AuthContext'
+import { SESSION_CHANNEL } from '../app/AuthContext'
 import PhaserGame from '../game/core/PhaserGame'
 import { otherTab, TAB_BOSS_COLOR } from '../game/sync/messages'
 import type { TabId } from '../game/sync/messages'
@@ -11,6 +12,7 @@ import { TabSync } from '../game/sync/TabSync'
 import { formatDuration } from '../lib/format'
 
 const POTION_PRICE = 50
+const HOLD_TO_LEAVE_MS = 2000
 
 interface MatchResultView {
   victory: boolean
@@ -18,8 +20,51 @@ interface MatchResultView {
   durationMs: number
 }
 
+/** Hold for HOLD_TO_LEAVE_MS to trigger — prevents accidental exits mid-fight. */
+function HoldButton({ onComplete, children }: { onComplete: () => void; children: string }) {
+  const [progress, setProgress] = useState(0)
+  const timer = useRef<number | null>(null)
+
+  const stop = useCallback(() => {
+    if (timer.current) window.clearInterval(timer.current)
+    timer.current = null
+    setProgress(0)
+  }, [])
+
+  function start() {
+    const startedAt = Date.now()
+    timer.current = window.setInterval(() => {
+      const fraction = (Date.now() - startedAt) / HOLD_TO_LEAVE_MS
+      if (fraction >= 1) {
+        stop()
+        onComplete()
+      } else {
+        setProgress(fraction)
+      }
+    }, 40)
+  }
+
+  useEffect(() => stop, [stop])
+
+  return (
+    <button
+      className="secondary hold-button"
+      onPointerDown={start}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      style={{
+        background: `linear-gradient(to right, var(--accent-strong) ${progress * 100}%, transparent ${progress * 100}%)`,
+      }}
+      title="Hold for 2 seconds"
+    >
+      {progress > 0 ? 'Keep holding…' : children}
+    </button>
+  )
+}
+
 export default function GamePage() {
   const { user, refreshUser } = useAuth()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const tab: TabId = searchParams.get('tab') === '2' ? 2 : 1
 
@@ -32,10 +77,27 @@ export default function GamePage() {
   const alertTimer = useRef<number | null>(null)
   const matchIdRef = useRef<number | null>(null)
   const [result, setResult] = useState<MatchResultView | null>(null)
+  const [loggedOut, setLoggedOut] = useState(false)
 
-  // One sync session per mounted game page.
-  const tabSync = useMemo(() => new TabSync(tab, new BroadcastChannelTransport()), [tab])
-  useEffect(() => () => tabSync.dispose(), [tabSync])
+  // One sync session per mount. Created in the effect (not useMemo) so React
+  // StrictMode's mount/unmount/mount cycle gets a fresh, un-disposed channel.
+  const [tabSync, setTabSync] = useState<TabSync | null>(null)
+  useEffect(() => {
+    const sync = new TabSync(tab, new BroadcastChannelTransport())
+    setTabSync(sync)
+    return () => sync.dispose()
+  }, [tab])
+
+  // A logout anywhere (any tab) pauses this game and overlays a notice.
+  useEffect(() => {
+    const channel = new BroadcastChannel(SESSION_CHANNEL)
+    channel.onmessage = (event: MessageEvent) => {
+      if (event.data?.type === 'logout') {
+        setLoggedOut(true)
+      }
+    }
+    return () => channel.close()
+  }, [])
 
   const onShopOpen = useCallback(() => setShopOpen(true), [])
   const onPotionsUsed = useCallback((remaining: number) => setPotions(remaining), [])
@@ -44,10 +106,6 @@ export default function GamePage() {
     if (alertTimer.current) window.clearTimeout(alertTimer.current)
     alertTimer.current = window.setTimeout(() => setAlertColor(null), 900)
   }, [])
-
-  function openOtherTab() {
-    window.open(`/game?tab=${otherTab(tab)}`, '_blank')
-  }
 
   // Tab 1 owns the server-side match lifecycle (the game emits only there).
   const onMatchStart = useCallback(() => {
@@ -87,6 +145,10 @@ export default function GamePage() {
     [refreshUser],
   )
 
+  function openOtherTab() {
+    window.open(`/game?tab=${otherTab(tab)}`, '_blank')
+  }
+
   async function buyPotion() {
     setBusy(true)
     setShopError(null)
@@ -102,38 +164,59 @@ export default function GamePage() {
     }
   }
 
-  if (!user) return null
+  if (!user && !loggedOut) return null
 
   return (
     <main className="game-page">
-      <header className="game-topbar">
-        <div className="game-topbar-left">
-          <button className="secondary" onClick={openOtherTab}>
-            ⧉ Open Dimension {otherTab(tab)}
-          </button>
-          <span className="dimension-badge" style={{ color: TAB_BOSS_COLOR[tab] }}>
-            {tab === 1 ? "Sirius's Dimension" : "Orion's Dimension"}
-          </span>
-        </div>
-        <div className="game-topbar-left">
-          <span className="game-points">✦ {points} points</span>
-          <Link className="button-link secondary" to="/lobby">
-            Lobby
-          </Link>
-        </div>
-      </header>
+      {tabSync && (
+        <PhaserGame
+          potions={potions}
+          tabSync={tabSync}
+          paused={loggedOut}
+          onShopOpen={onShopOpen}
+          onPotionsUsed={onPotionsUsed}
+          onWindup={onWindup}
+          onMatchStart={onMatchStart}
+          onMatchFinished={onMatchFinished}
+        />
+      )}
 
-      <PhaserGame
-        potions={potions}
-        tabSync={tabSync}
-        onShopOpen={onShopOpen}
-        onPotionsUsed={onPotionsUsed}
-        onWindup={onWindup}
-        onMatchStart={onMatchStart}
-        onMatchFinished={onMatchFinished}
-      />
+      <div className="corner corner-tl">
+        <button className="secondary" onClick={openOtherTab}>
+          ⧉ Open Dimension {otherTab(tab)}
+        </button>
+        <span className="dimension-badge" style={{ color: TAB_BOSS_COLOR[tab] }}>
+          {tab === 1 ? "Sirius's Dimension" : "Orion's Dimension"}
+        </span>
+      </div>
+      <div className="corner corner-tr">
+        <span className="game-points">✦ {points} points</span>
+        <HoldButton onComplete={() => navigate('/lobby')}>Lobby (hold)</HoldButton>
+      </div>
 
-      {result && (
+      {alertColor && (
+        <div
+          className="edge-alert"
+          style={{ boxShadow: `inset 0 0 70px 22px ${alertColor}` }}
+          aria-hidden
+        />
+      )}
+
+      {loggedOut && (
+        <div className="shop-overlay translucent" role="dialog">
+          <div className="shop-modal">
+            <h2>Logged out</h2>
+            <p>This account has been logged out. The fight has been suspended.</p>
+            <div className="shop-actions">
+              <Link className="button-link" to="/login">
+                Back to login
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {result && !loggedOut && (
         <div className="shop-overlay" role="dialog">
           <div className="shop-modal result-modal">
             <h2>{result.victory ? 'VICTORY' : 'DEFEAT'}</h2>
@@ -164,15 +247,7 @@ export default function GamePage() {
         </div>
       )}
 
-      {alertColor && (
-        <div
-          className="edge-alert"
-          style={{ boxShadow: `inset 0 0 70px 22px ${alertColor}` }}
-          aria-hidden
-        />
-      )}
-
-      {shopOpen && (
+      {shopOpen && !loggedOut && (
         <div className="shop-overlay" role="dialog">
           <div className="shop-modal">
             <h2>Potion Shop</h2>

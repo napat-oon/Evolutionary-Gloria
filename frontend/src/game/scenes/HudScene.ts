@@ -14,11 +14,13 @@ export class HudScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.add.rectangle(20 + BAR_WIDTH / 2, 24, BAR_WIDTH + 4, 18, 0x000000, 0.5)
-    this.hpFill = this.add.rectangle(22, 24, BAR_WIDTH, 12, 0xe4556e).setOrigin(0, 0.5)
-    this.add.rectangle(20 + BAR_WIDTH / 2, 44, BAR_WIDTH + 4, 14, 0x000000, 0.5)
-    this.manaFill = this.add.rectangle(22, 44, BAR_WIDTH, 8, 0x5cc8ff).setOrigin(0, 0.5)
-    this.potionText = this.add.text(22, 58, '', { fontSize: '14px', color: '#e8e6f0' })
+    // Bottom-left corner; the React UI owns the top corners.
+    const baseY = Number(this.game.config.height) - 52
+    this.add.rectangle(20 + BAR_WIDTH / 2, baseY, BAR_WIDTH + 4, 18, 0x000000, 0.5)
+    this.hpFill = this.add.rectangle(22, baseY, BAR_WIDTH, 12, 0xe4556e).setOrigin(0, 0.5)
+    this.add.rectangle(20 + BAR_WIDTH / 2, baseY + 20, BAR_WIDTH + 4, 14, 0x000000, 0.5)
+    this.manaFill = this.add.rectangle(22, baseY + 20, BAR_WIDTH, 8, 0x5cc8ff).setOrigin(0, 0.5)
+    this.potionText = this.add.text(22, baseY + 32, '', { fontSize: '14px', color: '#e8e6f0' })
   }
 
   update(): void {

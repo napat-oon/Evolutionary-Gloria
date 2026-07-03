@@ -14,6 +14,9 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null)
 
+/** Cross-tab session events (e.g. logout pauses fights in other tabs). */
+export const SESSION_CHANNEL = 'gloria-session'
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -51,6 +54,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     await api.post('/api/auth/logout')
     setUser(null)
+    // Tell every other tab (game dimensions included) the session ended.
+    const channel = new BroadcastChannel(SESSION_CHANNEL)
+    channel.postMessage({ type: 'logout' })
+    channel.close()
   }, [])
 
   const value = useMemo(
