@@ -21,6 +21,15 @@ ufw allow 80/tcp
 ufw allow 443/tcp
 ufw --force enable
 
+echo "== Swap (small droplets OOM during JVM startup without it) =="
+if [ ! -e /swapfile ]; then
+  fallocate -l 1G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
 echo "== App directory =="
 mkdir -p /opt/gloria
 

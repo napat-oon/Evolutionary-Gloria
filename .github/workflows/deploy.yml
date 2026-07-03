@@ -101,4 +101,4 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
-            "cd /opt/gloria && docker compose -f docker-compose.prod.yml ps && echo '===== backend logs =====' && docker compose -f docker-compose.prod.yml logs --tail 120 backend && echo '===== postgres logs =====' && docker compose -f docker-compose.prod.yml logs --tail 40 postgres" || true
+            "cd /opt/gloria && free -m && docker compose -f docker-compose.prod.yml ps && docker inspect --format 'backend last exit: {{.State.ExitCode}} oom-killed: {{.State.OOMKilled}}' gloria-backend-1 && echo '===== backend logs =====' && docker compose -f docker-compose.prod.yml logs --tail 120 backend && echo '===== postgres logs =====' && docker compose -f docker-compose.prod.yml logs --tail 40 postgres" || true
