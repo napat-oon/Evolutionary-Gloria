@@ -34,6 +34,11 @@ export class ConstellationTracker {
     this.stars = []
   }
 
+  /** Adopt another tab's star list (late-join sync). */
+  restore(stars: readonly StarColor[]): void {
+    this.stars = stars.slice(-ConstellationTracker.CAPACITY)
+  }
+
   get count(): number {
     return this.stars.length
   }

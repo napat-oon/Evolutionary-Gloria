@@ -20,14 +20,14 @@ class BoomerangScythe implements SpecialAttack {
     const overlap = scene.physics.add.overlap(scythe, arena.player, () => {
       if (hitDone) return
       hitDone = true
-      arena.hitPlayer(16)
+      arena.hitPlayer(16, { x: scythe.x, y: scythe.y })
     })
-    scene.tweens.add({ targets: scythe, angle: 1080, duration: 1600 })
+    scene.tweens.add({ targets: scythe, angle: 1080, duration: 1100 })
     scene.tweens.add({
       targets: scythe,
       x: target.x,
       y: target.y,
-      duration: 700,
+      duration: 420, // fast out, fast back
       ease: 'Sine.easeOut',
       yoyo: true, // boomerang back
       onYoyo: () => {
@@ -61,8 +61,9 @@ class StarVolley implements SpecialAttack {
           arena.player.x - star.x, arena.player.y - star.y).normalize()
         star.setVelocity(aim.x * 430, aim.y * 430)
         const overlap = scene.physics.add.overlap(star, arena.player, () => {
+          const source = { x: star.x, y: star.y }
           star.destroy()
-          arena.hitPlayer(8)
+          arena.hitPlayer(8, source)
         })
         scene.time.delayedCall(1800, () => {
           scene.physics.world.removeCollider(overlap)
@@ -82,7 +83,8 @@ class WardingCircle implements SpecialAttack {
   execute(boss: BossBase, arena: BossArena): void {
     const scene = boss.scene
     const circle = scene.add.image(boss.x, boss.y + 12, TEX.aoe)
-    circle.setTint(SIRIUS_TINT).setAlpha(0.4).setScale(2.2, 1.4)
+    // The aoe texture is a 96x64 ellipse; scale it into a big true circle.
+    circle.setTint(SIRIUS_TINT).setAlpha(0.4).setScale(3, 4.5)
     arena.bossDamageMultiplier = 0.5
     scene.tweens.add({ targets: circle, alpha: 0.25, yoyo: true, repeat: -1, duration: 500 })
     scene.time.delayedCall(WardingCircle.DURATION_MS, () => {

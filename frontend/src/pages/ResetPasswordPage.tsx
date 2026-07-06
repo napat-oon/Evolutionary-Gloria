@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../app/api'
+import PageBackdrop from './PageBackdrop'
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams()
@@ -32,8 +33,9 @@ export default function ResetPasswordPage() {
 
   return (
     <main className="page">
+      <PageBackdrop src="/images/eevee-evolutions-wallpaper.png" shiftY={-530} />
       <h1 className="game-title">Evolutionary Gloria</h1>
-      <form className="auth-card" onSubmit={onSubmit}>
+      <form className="auth-card glass" onSubmit={onSubmit}>
         <h2>Reset password</h2>
         {error && <p className="form-error">{error}</p>}
         <label>

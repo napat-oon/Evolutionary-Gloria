@@ -40,7 +40,7 @@ export class SceneSync {
       },
       onCast: (message) => {
         if (player.active && !sync.hasControl) {
-          player.castRemote(message.ability, message.aim, message.moveDir)
+          player.castRemote(message.ability, message.aim, message.aimPoint, message.moveDir)
         }
       },
       onMelee: (message) => {
@@ -53,12 +53,28 @@ export class SceneSync {
       },
       onDamage: (message) => {
         if (player.active) {
-          player.takeDamage(message.amount)
+          player.takeDamage(message.amount, message.force ?? false)
         }
+      },
+      onEnded: (message) => {
+        scene.game.events.emit('session:ended', message.reason)
       },
     }
 
-    player.onCastPerformed = (ability, aim, moveDir) => sync.publishCast(ability, aim, moveDir)
+    // Baseline session state for late-joining tabs; the boss room replaces
+    // this with one that includes the fight state.
+    sync.stateProvider = () => ({
+      scene: scene.scene.key,
+      phase: 'fighting',
+      bossHp: 0,
+      stars: [],
+      vitals: player.vitals.snapshot(),
+      x: player.x,
+      y: player.y,
+    })
+
+    player.onCastPerformed = (ability, aim, aimPoint, moveDir) =>
+      sync.publishCast(ability, aim, aimPoint, moveDir)
     player.onMeleePerformed = (aim, comboStep) => sync.publishMelee(aim, comboStep)
 
     scene.events.on(Phaser.Scenes.Events.POST_UPDATE, this.publishPose, this)
@@ -71,6 +87,7 @@ export class SceneSync {
       player.onCastPerformed = undefined
       player.onMeleePerformed = undefined
       sync.handlers = {}
+      sync.stateProvider = undefined
     })
   }
 

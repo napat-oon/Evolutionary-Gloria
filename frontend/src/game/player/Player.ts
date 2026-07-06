@@ -12,6 +12,9 @@ const DASH_MS = 240
 const DASH_COOLDOWN_MS = 800
 const COMBO_WINDOW_MS = 420
 const COMBO_DAMAGE = [8, 8, 14]
+const MELEE_REACH = 52
+const BLOCK_RADIUS = 46
+const BLOCK_HALF_ANGLE = Phaser.Math.DegToRad(55)
 
 export interface PlayerKeys {
   left: Phaser.Input.Keyboard.Key
@@ -34,18 +37,21 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   facing: 1 | -1 = 1
 
   /** Set by the sync layer so casts/melee replicate to the other tab. */
-  onCastPerformed?: (ability: ReturnType<typeof selectAbility>, aim: { x: number; y: number }, moveDir: -1 | 0 | 1) => void
+  onCastPerformed?: (ability: ReturnType<typeof selectAbility>, aim: { x: number; y: number },
+    aimPoint: { x: number; y: number }, moveDir: -1 | 0 | 1) => void
   onMeleePerformed?: (aim: { x: number; y: number }, comboStep: number) => void
 
   private readonly keys: PlayerKeys
   private readonly projectiles: Phaser.Physics.Arcade.Group
   private readonly attacks = buildAttackRegistry()
   private readonly bubble: Phaser.GameObjects.Image
+  private readonly blockArc: Phaser.GameObjects.Graphics
 
   private lockedUntil = 0
   private dashCooldownUntil = 0
   private dashingUntil = 0
   private invulnerableUntil = 0
+  private blockFlashUntil = 0
   private comboStep = 0
   private comboResetAt = 0
   private gravityDisabled = false
@@ -68,6 +74,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     this.projectiles = projectiles
     this.bubble = scene.add.image(x, y, TEX.bubble).setVisible(false).setDepth(5)
+    this.blockArc = scene.add.graphics().setDepth(6)
 
     const keyboard = scene.input.keyboard!
     this.keys = {
@@ -123,20 +130,22 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   /** Replays a cast from the other tab; mana is owned by the controller. */
   castRemote(ability: ReturnType<typeof selectAbility>, aim: { x: number; y: number },
-      moveDir: -1 | 0 | 1): void {
+      aimPoint: { x: number; y: number }, moveDir: -1 | 0 | 1): void {
     const pattern = this.attacks.get(ability)
     if (!pattern) return
     pattern.cast({
       scene: this.scene,
       player: this,
       aim: new Phaser.Math.Vector2(aim.x, aim.y),
+      aimPoint: new Phaser.Math.Vector2(aimPoint.x, aimPoint.y),
       moveDir,
       projectiles: this.projectiles,
+      remote: true,
     })
   }
 
   meleeRemote(aim: { x: number; y: number }, comboStep: number): void {
-    this.spawnSlash(new Phaser.Math.Vector2(aim.x, aim.y), comboStep)
+    this.spawnSlash(new Phaser.Math.Vector2(aim.x, aim.y), comboStep, true)
   }
 
   currentMoveDir(): -1 | 0 | 1 {
@@ -165,16 +174,49 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.lockFor(2000)
   }
 
+  /** Fire plunge or holding S + Space drops through passable platforms. */
   get passesThroughPlatforms(): boolean {
-    return this.firePlunging
+    if (this.firePlunging) return true
+    return this.controlled && this.keys.down.isDown && this.keys.jump.isDown
   }
 
-  takeDamage(amount: number): void {
-    if (this.isInvulnerable) return
+  /** @param force ignores dash/dodge i-frames (the twins' ultimate). */
+  takeDamage(amount: number, force = false): void {
+    if (this.isInvulnerable && !force) return
     this.vitals.takeDamage(amount)
-    this.setTint(0xffffff)
-    this.setTintFill()
-    this.scene.time.delayedCall(80, () => this.clearTint())
+    // White hit-flash (Phaser 4: fill is a tint mode, setTintFill is gone).
+    this.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL)
+    this.scene.time.delayedCall(80, () => {
+      this.clearTint()
+      this.setTintMode(Phaser.TintModes.MULTIPLY)
+    })
+  }
+
+  /**
+   * The mouse-aimed shield sector. Only the tab the player is actively
+   * controlling can block — puppet dimensions forward damage unblocked.
+   */
+  blocksDamageFrom(sourceX: number, sourceY: number): boolean {
+    if (!this.controlled || !this.active) return false
+    const toSource = new Phaser.Math.Vector2(sourceX - this.x, sourceY - this.y)
+    if (toSource.lengthSq() === 0) return false
+    const diff = Phaser.Math.Angle.Wrap(toSource.angle() - this.aimVector().angle())
+    if (Math.abs(diff) > BLOCK_HALF_ANGLE) return false
+    this.blockFlashUntil = this.scene.time.now + 160
+    return true
+  }
+
+  private renderBlockArc(): void {
+    const g = this.blockArc
+    g.clear()
+    if (!this.controlled || !this.active) return
+    const angle = this.aimVector().angle()
+    const flashing = this.scene.time.now < this.blockFlashUntil
+    g.setPosition(this.x, this.y)
+    g.lineStyle(flashing ? 6 : 3, flashing ? 0xffffff : 0x9bd8ff, flashing ? 1 : 0.75)
+    g.beginPath()
+    g.arc(0, 0, BLOCK_RADIUS, angle - BLOCK_HALF_ANGLE, angle + BLOCK_HALF_ANGLE)
+    g.strokePath()
   }
 
   preUpdate(time: number, delta: number): void {
@@ -185,6 +227,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Heal bubble visual follows the vitals state.
     this.bubble.setVisible(this.vitals.healBubbleActive)
     this.bubble.setPosition(this.x, this.y)
+
+    // The shield arc tracks the mouse whenever this tab is the active one.
+    this.renderBlockArc()
 
     // Puppet tabs render only; the controlling tab owns input and physics.
     if (!this.controlled) return
@@ -219,9 +264,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.facing = moveDir
       this.setFlipX(moveDir === -1)
     }
-    const jumpPressed =
-      Phaser.Input.Keyboard.JustDown(this.keys.jump) || Phaser.Input.Keyboard.JustDown(this.keys.up)
-    if (jumpPressed && body.onFloor() && !this.gravityDisabled) {
+    // Space jumps (W is only the aim/variant modifier); S + Space drops
+    // through passable platforms instead of jumping.
+    const jumpPressed = Phaser.Input.Keyboard.JustDown(this.keys.jump)
+    if (jumpPressed && !this.keys.down.isDown && body.onFloor() && !this.gravityDisabled) {
       this.setVelocityY(-JUMP_SPEED)
     }
 
@@ -246,10 +292,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private aimVector(): Phaser.Math.Vector2 {
-    const pointer = this.scene.input.activePointer
-    const world = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2
+    const world = this.aimWorldPoint()
     const aim = new Phaser.Math.Vector2(world.x - this.x, world.y - this.y)
     return aim.lengthSq() === 0 ? new Phaser.Math.Vector2(this.facing, 0) : aim.normalize()
+  }
+
+  /** The mouse position in world coordinates (abilities that home on it). */
+  private aimWorldPoint(): Phaser.Math.Vector2 {
+    const pointer = this.scene.input.activePointer
+    return (pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2).clone()
   }
 
   private tryMeleeCombo(): void {
@@ -264,15 +315,24 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.onMeleePerformed?.({ x: aim.x, y: aim.y }, this.comboStep)
   }
 
-  private spawnSlash(aim: Phaser.Math.Vector2, comboStep: number): void {
+  private spawnSlash(aim: Phaser.Math.Vector2, comboStep: number, remote = false): void {
     const damage = COMBO_DAMAGE[Math.min(comboStep, 3) - 1]
     const slash = this.projectiles.create(
-      this.x + aim.x * 34, this.y + aim.y * 34, TEX.spark) as Phaser.Physics.Arcade.Image
+      this.x + aim.x * MELEE_REACH, this.y + aim.y * MELEE_REACH,
+      TEX.spark) as Phaser.Physics.Arcade.Image
     slash.setData('damage', damage)
     slash.setData('melee', true)
-    slash.setScale(comboStep === 3 ? 2.6 : 1.8).setAlpha(0.85)
+    if (remote) slash.setData('remote', true)
+    slash.setScale(comboStep === 3 ? 5 : 3.6, 1.9).setAlpha(0.85)
     slash.setRotation(aim.angle())
-    ;(slash.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
+    const body = slash.body as Phaser.Physics.Arcade.Body
+    body.setAllowGravity(false)
+    // A long rectangle reaching out along the aim, not a point spark.
+    if (Math.abs(aim.x) >= Math.abs(aim.y)) {
+      body.setSize(64, 30)
+    } else {
+      body.setSize(30, 64)
+    }
     this.scene.time.delayedCall(110, () => slash.destroy())
   }
 
@@ -290,19 +350,24 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (!pattern || !this.vitals.spendMana(pattern.manaCost)) return
 
     const aim = this.aimVector()
+    const aimPoint = this.aimWorldPoint()
     const ctx: CastContext = {
       scene: this.scene,
       player: this,
       aim,
+      aimPoint,
       moveDir,
       projectiles: this.projectiles,
+      remote: false,
     }
     pattern.cast(ctx)
-    this.onCastPerformed?.(ability, { x: aim.x, y: aim.y }, moveDir)
+    this.onCastPerformed?.(ability, { x: aim.x, y: aim.y },
+      { x: aimPoint.x, y: aimPoint.y }, moveDir)
   }
 
   destroy(fromScene?: boolean): void {
     this.bubble.destroy()
+    this.blockArc.destroy()
     super.destroy(fromScene)
   }
 }

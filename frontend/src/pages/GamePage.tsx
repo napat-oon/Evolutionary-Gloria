@@ -78,6 +78,9 @@ export default function GamePage() {
   const matchIdRef = useRef<number | null>(null)
   const [result, setResult] = useState<MatchResultView | null>(null)
   const [loggedOut, setLoggedOut] = useState(false)
+  // Another tab of this session left for the lobby: the session is over
+  // everywhere, so this tab only offers to close itself.
+  const [sessionEnded, setSessionEnded] = useState(false)
 
   // One sync session per mount. Created in the effect (not useMemo) so React
   // StrictMode's mount/unmount/mount cycle gets a fresh, un-disposed channel.
@@ -100,6 +103,17 @@ export default function GamePage() {
   }, [])
 
   const onShopOpen = useCallback(() => setShopOpen(true), [])
+  const onSessionEnded = useCallback(() => setSessionEnded(true), [])
+
+  // Mirror tabs don't own the server match, but they still show the outcome.
+  const onFightEnded = useCallback(
+    (victory: boolean) => {
+      if (tab !== 1) {
+        setResult({ victory, pointsEarned: 0, durationMs: 0 })
+      }
+    },
+    [tab],
+  )
   const onPotionsUsed = useCallback((remaining: number) => setPotions(remaining), [])
   const onWindup = useCallback((color: string) => {
     setAlertColor(color)
@@ -149,6 +163,12 @@ export default function GamePage() {
     window.open(`/game?tab=${otherTab(tab)}`, '_blank')
   }
 
+  /** Leaving ends the session for every tab, not just this one. */
+  function leaveToLobby() {
+    tabSync?.publishEnded('left')
+    navigate('/lobby')
+  }
+
   async function buyPotion() {
     setBusy(true)
     setShopError(null)
@@ -172,12 +192,14 @@ export default function GamePage() {
         <PhaserGame
           potions={potions}
           tabSync={tabSync}
-          paused={loggedOut}
+          paused={loggedOut || sessionEnded}
           onShopOpen={onShopOpen}
           onPotionsUsed={onPotionsUsed}
           onWindup={onWindup}
           onMatchStart={onMatchStart}
           onMatchFinished={onMatchFinished}
+          onFightEnded={onFightEnded}
+          onSessionEnded={onSessionEnded}
         />
       )}
 
@@ -191,7 +213,8 @@ export default function GamePage() {
       </div>
       <div className="corner corner-tr">
         <span className="game-points">✦ {points} points</span>
-        <HoldButton onComplete={() => navigate('/lobby')}>Lobby (hold)</HoldButton>
+        {/* Only the primary dimension can leave; other tabs are pure mirrors. */}
+        {tab === 1 && <HoldButton onComplete={leaveToLobby}>Lobby (hold)</HoldButton>}
       </div>
 
       {alertColor && (
@@ -208,15 +231,35 @@ export default function GamePage() {
             <h2>Logged out</h2>
             <p>This account has been logged out. The fight has been suspended.</p>
             <div className="shop-actions">
-              <Link className="button-link" to="/login">
-                Back to login
-              </Link>
+              {tab === 1 ? (
+                <Link className="button-link" to="/login">
+                  Back to login
+                </Link>
+              ) : (
+                <button onClick={() => window.close()}>Close this tab</button>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {result && !loggedOut && (
+      {sessionEnded && !loggedOut && (
+        <div className="shop-overlay translucent" role="dialog">
+          <div className="shop-modal">
+            <h2>Session ended</h2>
+            <p>
+              The player left to the lobby from another tab, so this dimension
+              has been sealed. Close this tab — start the next fight from the
+              lobby.
+            </p>
+            <div className="shop-actions">
+              <button onClick={() => window.close()}>Close this tab</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {result && !loggedOut && !sessionEnded && (
         <div className="shop-overlay" role="dialog">
           <div className="shop-modal result-modal">
             <h2>{result.victory ? 'VICTORY' : 'DEFEAT'}</h2>
@@ -238,10 +281,16 @@ export default function GamePage() {
               <p>The outcome echoes from the other dimension.</p>
             )}
             <div className="shop-actions">
-              <button onClick={() => window.location.reload()}>Fight again</button>
-              <Link className="button-link secondary" to="/lobby">
-                Back to lobby
-              </Link>
+              {tab === 1 ? (
+                <>
+                  <button onClick={() => window.location.reload()}>Fight again</button>
+                  <Link className="button-link secondary" to="/lobby">
+                    Back to lobby
+                  </Link>
+                </>
+              ) : (
+                <button onClick={() => window.close()}>Close this tab</button>
+              )}
             </div>
           </div>
         </div>

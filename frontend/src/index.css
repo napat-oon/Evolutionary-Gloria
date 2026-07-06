@@ -32,8 +32,24 @@ body {
   padding: 1.5rem;
 }
 
+/* Mantinia (licensed display serif). */
+@font-face {
+  font-family: mantinia;
+  src: url("/fonts/mantinia-regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+.mantinia {
+  font-family: mantinia, serif;
+  font-weight: 400;
+}
+
 .game-title {
-  font-size: clamp(1.8rem, 5vw, 3rem);
+  font-family: mantinia, serif;
+  font-size: 69px;
+  font-weight: 400;
   letter-spacing: 0.08em;
   background: linear-gradient(120deg, var(--accent), #6ee7ff);
   -webkit-background-clip: text;
@@ -41,6 +57,21 @@ body {
   color: transparent;
   text-align: center;
 }
+
+/* Full-viewport artwork behind a page; pages shift the visible band. */
+.page-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.page-bg img {
+  width: 100%;
+  min-width: 960px;
+}
+
 
 .auth-card {
   display: flex;
@@ -54,7 +85,8 @@ body {
 }
 
 .auth-card h2 {
-  font-weight: 600;
+  font-family: mantinia, serif;
+  font-weight: 400;
 }
 
 .auth-card label {
@@ -162,6 +194,8 @@ button.secondary,
 }
 
 .boss-card {
+  position: relative;
+  overflow: hidden;
   width: 14rem;
   aspect-ratio: 1;
   border-radius: 1.25rem;
@@ -180,13 +214,40 @@ button.secondary,
   border-color: var(--accent);
 }
 
+.boss-card-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity 200ms ease;
+}
+
+.boss-card-art-hover {
+  opacity: 0;
+}
+
+.boss-card:hover .boss-card-art-hover {
+  opacity: 1;
+}
+
+.boss-card-title,
+.boss-card-sub {
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
+}
+
 .boss-card-title {
+  font-family: mantinia, serif;
   font-size: 1.3rem;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .boss-card-sub {
-  color: var(--muted);
+  font-family: mantinia, serif;
+  font-weight: 400;
+  color: var(--text);
   font-size: 0.9rem;
 }
 
@@ -334,4 +395,37 @@ button.secondary,
   border: 1px dashed var(--border);
   word-break: break-all;
   user-select: all;
+}
+
+/* 90%-transparent surfaces over background artwork (playtest spec).
+   Kept last so it wins over the component's own background. */
+.glass,
+.auth-card.glass,
+button.glass,
+.button-link.glass,
+.leaderboard.glass {
+  background: rgba(22, 26, 44, 0.1);
+}
+
+.auth-card.glass input {
+  background: rgba(11, 13, 23, 0.1);
+}
+
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 5, 12, 0.45);
+}
+
+.loading-box {
+  padding: 1rem 2rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: rgba(22, 26, 44, 0.75);
+  font-size: 1.1rem;
+  letter-spacing: 0.05em;
 }

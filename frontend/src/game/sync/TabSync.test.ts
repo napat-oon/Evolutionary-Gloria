@@ -79,3 +79,81 @@ describe('TabSync control handover', () => {
     expect(applied).toEqual([7])
   })
 })
+
+describe('TabSync session handshake and end', () => {
+  const state = {
+    scene: 'boss-room',
+    phase: 'fighting' as const,
+    bossHp: 420,
+    stars: ['jade' as const],
+    vitals: { hp: 80, maxHp: 100, mana: 50, maxMana: 100, potions: 2, healBubbleActive: true },
+    x: 512,
+    y: 1000,
+  }
+
+  it('a late tab is welcomed with the running state', () => {
+    const [transportA, transportB] = makeTransportPair()
+    const running = new TabSync(1, transportA)
+    running.stateProvider = () => state
+
+    // The other dimension joins late.
+    const joiner = new TabSync(2, transportB)
+    const welcomed: unknown[] = []
+    joiner.handlers.onWelcome = (m) => welcomed.push(m.state)
+    joiner.publishHello()
+
+    expect(welcomed).toEqual([state])
+  })
+
+  it('welcomes the joiner even after it stole control on focus', () => {
+    const [transportA, transportB] = makeTransportPair()
+    const running = new TabSync(1, transportA)
+    running.stateProvider = () => state
+
+    const joiner = new TabSync(2, transportB)
+    joiner.claimControl() // the fresh tab is focused before it says hello
+    expect(running.hasControl).toBe(false)
+
+    const welcomed: unknown[] = []
+    joiner.handlers.onWelcome = (m) => welcomed.push(m.state)
+    joiner.publishHello()
+    expect(welcomed).toEqual([state]) // still answered by the running scene
+  })
+
+  it('hello goes unanswered when no session is running', () => {
+    const [transportA, transportB] = makeTransportPair()
+    const other = new TabSync(2, transportB) // no stateProvider, no control
+    void other
+    const joiner = new TabSync(2, transportA)
+    const welcomed: unknown[] = []
+    joiner.handlers.onWelcome = (m) => welcomed.push(m.state)
+    joiner.publishHello()
+    expect(welcomed).toEqual([])
+  })
+
+  it('ended reaches every other tab (same dimension too) and stops control claims', () => {
+    const [transportA, transportB] = makeTransportPair()
+    const leaver = new TabSync(1, transportA)
+    const mirror = new TabSync(1, transportB) // duplicate of the same dimension
+    const reasons: string[] = []
+    mirror.handlers.onEnded = (m) => reasons.push(m.reason)
+
+    leaver.publishEnded('left')
+    expect(reasons).toEqual(['left'])
+    expect(mirror.isEnded).toBe(true)
+
+    mirror.claimControl()
+    expect(mirror.hasControl).toBe(false) // sealed tabs cannot take over
+  })
+
+  it('forwarded damage keeps its undodgeable flag', () => {
+    const [transportA, transportB] = makeTransportPair()
+    const controller = new TabSync(1, transportA)
+    const puppet = new TabSync(2, transportB)
+    const forced: Array<boolean | undefined> = []
+    controller.handlers.onDamage = (m) => forced.push(m.force)
+
+    puppet.reportDamage(14, true)
+    expect(forced).toEqual([true])
+  })
+})

@@ -5,10 +5,13 @@ import { BossBase } from './BossBase'
 
 export const ORION_TINT = 0xe4556e
 
-/** Dashes to the player and charges a wide horizontal swipe. */
+/** Dashes to the player and charges a huge half-oval swipe in front of him. */
 class DashSwipe implements SpecialAttack {
   readonly name = 'dash-swipe'
   readonly cooldownMs = 8000
+  /** Half-ellipse hitbox: the flat edge starts on Orion, bulging forward. */
+  private static readonly REACH_X = 230
+  private static readonly REACH_Y = 90
 
   execute(boss: BossBase, arena: BossArena): void {
     const scene = boss.scene
@@ -20,18 +23,24 @@ class DashSwipe implements SpecialAttack {
       ease: 'Cubic.easeIn',
       onComplete: () => {
         if (!boss.active) return
-        // Charge, then a wide horizontal strike.
+        // Charge, then the half-oval strike.
         scene.time.delayedCall(450, () => {
           if (!boss.active) return
           const dir = Math.sign(arena.player.x - boss.x) || 1
-          const slash = scene.add.image(boss.x + dir * 60, boss.y, TEX.scythe)
-          slash.setTint(ORION_TINT).setScale(2.4).setFlipX(dir < 0)
+          const area = scene.add.image(boss.x + dir * (DashSwipe.REACH_X / 2), boss.y, TEX.aoe)
+          area.setTint(ORION_TINT).setAlpha(0.5)
+            .setScale(DashSwipe.REACH_X / 96, (DashSwipe.REACH_Y * 2) / 64)
           scene.tweens.add({
-            targets: slash, angle: dir * 160, duration: 200,
-            onComplete: () => slash.destroy(),
+            targets: area, alpha: 0, duration: 260,
+            onComplete: () => area.destroy(),
           })
-          if (Math.abs(arena.player.x - boss.x) < 170 && Math.abs(arena.player.y - boss.y) < 60) {
-            arena.hitPlayer(20)
+          const dx = arena.player.x - boss.x
+          const dy = arena.player.y - boss.y
+          const inFront = Math.sign(dx) === dir || dx === 0
+          const inOval =
+            (dx / DashSwipe.REACH_X) ** 2 + (dy / DashSwipe.REACH_Y) ** 2 <= 1
+          if (inFront && inOval) {
+            arena.hitPlayer(20, { x: boss.x, y: boss.y })
           }
         })
       },
@@ -47,6 +56,8 @@ class ExplosiveShell implements SpecialAttack {
   readonly name = 'explosive-shell'
   readonly cooldownMs = 16000
   private static readonly SHELL_MS = 6000
+  private static readonly EXPLOSION_DELAY_MS = 1200
+  private static readonly AFTER_EXPLOSION_COOLDOWN_MS = 5000
 
   execute(boss: BossBase, arena: BossArena): void {
     const scene = boss.scene
@@ -59,24 +70,34 @@ class ExplosiveShell implements SpecialAttack {
       callback: () => shell.setPosition(boss.x, boss.y),
     })
 
+    const dismantle = () => {
+      scene.events.off('boss:damaged', onDamaged)
+      scene.events.emit('boss:shell-off')
+      follow.remove()
+      shell.destroy()
+    }
+
+    // Only the FIRST hit primes the (single) delayed explosion, and the
+    // ability's next use is counted from when that explosion goes off.
     const onDamaged = () => {
-      scene.time.delayedCall(1200, () => {
+      scene.events.off('boss:damaged', onDamaged)
+      scene.time.delayedCall(ExplosiveShell.EXPLOSION_DELAY_MS, () => {
+        if (shell.active) dismantle()
+        boss.setSpecialCooldown(this.name,
+          scene.time.now + ExplosiveShell.AFTER_EXPLOSION_COOLDOWN_MS)
         if (!boss.active) return
         const blast = scene.add.image(boss.x, boss.y, TEX.aoe)
         blast.setTint(0xff7a3c).setScale(2.6, 2.2)
         scene.tweens.add({ targets: blast, alpha: 0, duration: 350, onComplete: () => blast.destroy() })
         if (Phaser.Math.Distance.Between(arena.player.x, arena.player.y, boss.x, boss.y) < 150) {
-          arena.hitPlayer(22)
+          arena.hitPlayer(22, { x: boss.x, y: boss.y })
         }
       })
     }
     scene.events.on('boss:damaged', onDamaged)
 
     scene.time.delayedCall(ExplosiveShell.SHELL_MS, () => {
-      scene.events.off('boss:damaged', onDamaged)
-      scene.events.emit('boss:shell-off')
-      follow.remove()
-      shell.destroy()
+      if (shell.active) dismantle()
     })
   }
 }
@@ -101,15 +122,15 @@ class BlackHole implements SpecialAttack {
       callback: () => {
         const player = arena.player
         const distance = Phaser.Math.Distance.Between(player.x, player.y, hole.x, hole.y)
-        if (distance < 220 && player.isControlled) {
+        if (distance < 240 && player.isControlled) {
           const toHole = new Phaser.Math.Vector2(hole.x - player.x, hole.y - player.y).normalize()
           const body = player.body as Phaser.Physics.Arcade.Body
-          body.velocity.x += toHole.x * 14
-          body.velocity.y += toHole.y * 8
+          body.velocity.x += toHole.x * 34
+          body.velocity.y += toHole.y * 22
         }
         if (distance < 46 && scene.time.now - lastTick > 500) {
           lastTick = scene.time.now
-          arena.hitPlayer(6)
+          arena.hitPlayer(6, { x: hole.x, y: hole.y })
         }
       },
     })

@@ -16,7 +16,13 @@ interface PhaserGameProps {
   onWindup?: (color: string) => void
   onMatchStart?: () => void
   onMatchFinished?: (victory: boolean) => void
+  /** Fires on every tab when the fight ends (match:finished is tab 1 only). */
+  onFightEnded?: (victory: boolean) => void
+  onSessionEnded?: (reason: string) => void
 }
+
+/** How often the worker heartbeat steps a hidden game, in ms (~20 fps). */
+const BACKGROUND_STEP_MS = 50
 
 /** Mounts the Phaser game and bridges its events into React. */
 export default function PhaserGame({
@@ -28,9 +34,12 @@ export default function PhaserGame({
   onWindup,
   onMatchStart,
   onMatchFinished,
+  onFightEnded,
+  onSessionEnded,
 }: PhaserGameProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
+  const pausedRef = useRef(paused)
 
   useEffect(() => {
     if (!containerRef.current || gameRef.current) return
@@ -58,6 +67,8 @@ export default function PhaserGame({
     if (onWindup) game.events.on('sync:windup', onWindup)
     if (onMatchStart) game.events.on('match:start', onMatchStart)
     if (onMatchFinished) game.events.on('match:finished', onMatchFinished)
+    if (onFightEnded) game.events.on('fight:ended', onFightEnded)
+    if (onSessionEnded) game.events.on('session:ended', onSessionEnded)
     gameRef.current = game
 
     // Whichever tab the user is looking at controls the character.
@@ -65,7 +76,18 @@ export default function PhaserGame({
     window.addEventListener('focus', claim)
     if (document.hasFocus()) tabSync.claimControl()
 
+    // Hidden tabs get no requestAnimationFrame, which froze the puppet
+    // dimension until you tabbed back. A worker's timers keep firing while
+    // hidden, so we step the game manually from its heartbeat.
+    const ticker = new Worker('/tick-worker.js')
+    ticker.onmessage = () => {
+      if (document.hidden && !pausedRef.current && gameRef.current) {
+        gameRef.current.step(performance.now(), BACKGROUND_STEP_MS)
+      }
+    }
+
     return () => {
+      ticker.terminate()
       window.removeEventListener('focus', claim)
       game.destroy(true)
       gameRef.current = null
@@ -75,6 +97,7 @@ export default function PhaserGame({
   }, [])
 
   useEffect(() => {
+    pausedRef.current = paused
     const game = gameRef.current
     if (!game) return
     if (paused) {

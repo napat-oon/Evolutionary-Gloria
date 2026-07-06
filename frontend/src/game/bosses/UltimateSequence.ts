@@ -8,39 +8,64 @@ import { SIRIUS_TINT } from './Sirius'
 
 const EXPLOSION_DAMAGE = 60
 const DIVE_DAMAGE = 14
+/** Windup before the map-wide finale blast — long enough to reach a wall. */
+const FINALE_DELAY_MS = 2000
+/** Wait between dives; also used to stay in step when the OTHER twin dives. */
+const DIVE_CYCLE_MS = 940
+
+/** Everything the sequence needs to know about the room's geometry. */
+export interface UltimateLayout {
+  worldWidth: number
+  worldHeight: number
+  groundY: number
+  centerX: number
+  leftWallX: number
+  rightWallX: number
+}
 
 /**
- * The twins' constellation ultimate: crouch-bounce into the air, float in
- * smoke while tracking the player, dive once per stored star (newest first),
- * then meet in the centre for the scythe clash and the map-wide explosion
- * that only the cover wall blocks.
+ * The twins' constellation ultimate: Eevee is dragged to the centre of the
+ * map, the twins crouch-bounce into the air and float in smoke, then dive
+ * once per stored star (newest first) — each dive is performed by the twin
+ * whose color matches the consumed star, in its own dimension. Dives cannot
+ * be dodged, only blocked. The finale explosion can be neither dodged nor
+ * blocked; only standing behind one of the cover walls survives it.
  */
 export class UltimateSequence {
   private readonly scene: Phaser.Scene
   private readonly boss: BossBase
   private readonly arena: BossArena
   private readonly tracker: ConstellationTracker
-  private readonly wallX: number
+  private readonly layout: UltimateLayout
   private readonly onDone: () => void
   private smoke?: Phaser.GameObjects.Image
   private hover?: Phaser.Time.TimerEvent
 
   constructor(scene: Phaser.Scene, boss: BossBase, arena: BossArena,
-      tracker: ConstellationTracker, wallX: number, onDone: () => void) {
+      tracker: ConstellationTracker, layout: UltimateLayout, onDone: () => void) {
     this.scene = scene
     this.boss = boss
     this.arena = arena
     this.tracker = tracker
-    this.wallX = wallX
+    this.layout = layout
     this.onDone = onDone
   }
 
   start(): void {
-    const { scene, boss } = this
+    const { scene, boss, layout } = this
     boss.setUltimate(true)
     this.arena.announceWindup()
 
-    const floatX = boss.starColor === 'jade' ? 200 : 760 // Sirius left, Orion right
+    // The stars drag Eevee to the centre of the map for the ritual.
+    const player = this.arena.player
+    if (player.isControlled) {
+      player.setPosition(layout.centerX, layout.groundY - 40)
+      player.setVelocity(0, 0)
+    }
+
+    const floatX = boss.starColor === 'jade'
+      ? layout.centerX - 540 // Sirius floats left
+      : layout.centerX + 540 // Orion floats right
     scene.tweens.chain({
       targets: boss,
       tweens: [
@@ -78,11 +103,17 @@ export class UltimateSequence {
       this.finale()
       return
     }
+    // Each star is dived by the twin of that color — in ITS dimension. The
+    // other dimension's twin keeps floating for one cycle so both tabs stay
+    // in step.
+    if (star !== this.boss.starColor) {
+      this.scene.time.delayedCall(DIVE_CYCLE_MS, () => this.diveNext())
+      return
+    }
     const { scene, boss } = this
     const targetX = this.arena.player.x
     const targetY = this.arena.player.y
     const returnY = 140
-    // Dive colored by the consumed star, in a random slanted angle feel.
     const flash = scene.add.image(boss.x, boss.y, TEX.spark)
       .setTint(star === 'jade' ? SIRIUS_TINT : ORION_TINT).setScale(3)
     scene.tweens.add({ targets: flash, alpha: 0, duration: 250, onComplete: () => flash.destroy() })
@@ -96,7 +127,8 @@ export class UltimateSequence {
       onComplete: () => {
         if (Phaser.Math.Distance.Between(
             this.arena.player.x, this.arena.player.y, boss.x, boss.y) < 75) {
-          this.arena.hitPlayer(DIVE_DAMAGE)
+          // Undodgable — only the shield arc (or a wall) helps.
+          this.arena.hitPlayer(DIVE_DAMAGE, { x: boss.x, y: boss.y }, { undodgeable: true })
         }
         scene.tweens.add({
           targets: boss,
@@ -110,9 +142,9 @@ export class UltimateSequence {
   }
 
   private finale(): void {
-    const { scene, boss } = this
+    const { scene, boss, layout } = this
     this.hover?.remove()
-    const centerX = 480
+    const centerX = layout.centerX
     const centerY = 200
 
     // The twin from the other dimension appears for the clash.
@@ -132,14 +164,19 @@ export class UltimateSequence {
         const clash = scene.add.image(centerX, centerY, TEX.spark).setScale(5)
         scene.tweens.add({ targets: clash, alpha: 0, duration: 300, onComplete: () => clash.destroy() })
         this.arena.announceWindup()
-        scene.time.delayedCall(1000, () => {
-          const blast = scene.add.rectangle(480, 270, 960, 540, 0xfff3d6, 0.9).setDepth(9)
+        scene.time.delayedCall(FINALE_DELAY_MS, () => {
+          const blast = scene.add.rectangle(
+            layout.worldWidth / 2, layout.worldHeight / 2,
+            layout.worldWidth, layout.worldHeight, 0xfff3d6, 0.9).setDepth(9)
           scene.tweens.add({ targets: blast, alpha: 0, duration: 600, onComplete: () => blast.destroy() })
           scene.cameras.main.shake(400, 0.02)
           const player = this.arena.player
-          const shielded = player.x > this.wallX + 18 // behind the cover wall
+          // Only the outer sides of the two cover walls are safe.
+          const shielded =
+            player.x < layout.leftWallX - 18 || player.x > layout.rightWallX + 18
           if (!shielded) {
-            this.arena.hitPlayer(EXPLOSION_DAMAGE)
+            this.arena.hitPlayer(EXPLOSION_DAMAGE, undefined,
+              { undodgeable: true, unblockable: true })
           }
           ghost.destroy()
           this.cleanup()
@@ -156,7 +193,7 @@ export class UltimateSequence {
     const boss = this.boss
     this.scene.tweens.add({
       targets: boss,
-      y: 430,
+      y: this.layout.groundY - 70,
       duration: 400,
       ease: 'Cubic.easeIn',
       onComplete: () => {

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../app/api'
+import PageBackdrop from './PageBackdrop'
 
 interface ForgotResponse {
   message: string
@@ -29,9 +30,10 @@ export default function ForgotPasswordPage() {
 
   return (
     <main className="page">
+      <PageBackdrop src="/images/eevee-evolutions-wallpaper.png" shiftY={-530} />
       <h1 className="game-title">Evolutionary Gloria</h1>
-      <form className="auth-card" onSubmit={onSubmit}>
-        <h2>Forgot password</h2>
+      <form className="auth-card glass" onSubmit={onSubmit}>
+        <h2>Forgot Password</h2>
         {error && <p className="form-error">{error}</p>}
         {result ? (
           <>

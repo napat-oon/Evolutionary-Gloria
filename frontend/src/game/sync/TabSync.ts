@@ -2,12 +2,15 @@ import type {
   BossHpMessage,
   CastMessage,
   DamageMessage,
+  EndedMessage,
   FightMessage,
   MeleeMessage,
   PoseMessage,
+  SessionState,
   StarMessage,
   SyncMessage,
   TabId,
+  WelcomeMessage,
   WindupMessage,
 } from './messages'
 import { TAB_BOSS_COLOR } from './messages'
@@ -23,6 +26,8 @@ export interface TabSyncHandlers {
   onBossHp?: (message: BossHpMessage) => void
   onStar?: (message: StarMessage) => void
   onFight?: (message: FightMessage) => void
+  onWelcome?: (message: WelcomeMessage) => void
+  onEnded?: (message: EndedMessage) => void
 }
 
 /**
@@ -31,9 +36,14 @@ export interface TabSyncHandlers {
  */
 export class TabSync {
   readonly tab: TabId
+  /** Unique per tab instance — tells duplicate same-dimension tabs apart. */
+  readonly instanceId = Math.random().toString(36).slice(2)
   handlers: TabSyncHandlers = {}
+  /** Set by the active scene; answers late-joining tabs' hello with state. */
+  stateProvider?: () => SessionState
 
   private controlling: boolean
+  private ended = false
   private readonly transport: SyncTransport
   private readonly unsubscribe: () => void
   private readonly seenDamageIds = new Set<string>()
@@ -47,15 +57,33 @@ export class TabSync {
     this.unsubscribe = transport.subscribe((message) => this.receive(message))
   }
 
+  /** True once the session ended for everyone (someone left to the lobby). */
+  get isEnded(): boolean {
+    return this.ended
+  }
+
   get hasControl(): boolean {
     return this.controlling
   }
 
   claimControl(): void {
-    if (this.controlling) return
+    if (this.controlling || this.ended) return
     this.controlling = true
     this.transport.post({ type: 'control', tab: this.tab })
     this.handlers.onControlChange?.(true)
+  }
+
+  /** Ask any running session for its state (sent by a freshly opened tab). */
+  publishHello(): void {
+    this.transport.post({ type: 'hello', tab: this.tab, instanceId: this.instanceId })
+  }
+
+  /** Everyone's session is over: the player left for the lobby. */
+  publishEnded(reason: EndedMessage['reason']): void {
+    this.ended = true
+    this.transport.post({
+      type: 'ended', tab: this.tab, instanceId: this.instanceId, reason,
+    })
   }
 
   publishPose(scene: string, x: number, y: number, facing: 1 | -1,
@@ -64,8 +92,8 @@ export class TabSync {
   }
 
   publishCast(ability: CastMessage['ability'], aim: { x: number; y: number },
-      moveDir: -1 | 0 | 1): void {
-    this.transport.post({ type: 'cast', tab: this.tab, ability, aim, moveDir })
+      aimPoint: { x: number; y: number }, moveDir: -1 | 0 | 1): void {
+    this.transport.post({ type: 'cast', tab: this.tab, ability, aim, aimPoint, moveDir })
   }
 
   publishMelee(aim: { x: number; y: number }, comboStep: number): void {
@@ -81,10 +109,10 @@ export class TabSync {
    * Damage seen on this tab. Applied locally by the caller only when this tab
    * has control; otherwise forwarded to the controlling tab (deduplicated).
    */
-  reportDamage(amount: number): boolean {
+  reportDamage(amount: number, force = false): boolean {
     if (this.controlling) return true
     const eventId = `${this.tab}-${Date.now()}-${this.damageCounter++}`
-    this.transport.post({ type: 'damage', tab: this.tab, amount, eventId })
+    this.transport.post({ type: 'damage', tab: this.tab, amount, eventId, force })
     return false
   }
 
@@ -107,6 +135,42 @@ export class TabSync {
   }
 
   private receive(message: SyncMessage): void {
+    // Session-lifecycle messages are keyed by instance, not dimension, so
+    // duplicate tabs of the same dimension can still handshake and stop.
+    switch (message.type) {
+      case 'hello':
+        if (message.instanceId === this.instanceId) return
+        // Any tab with a running scene answers — the joiner may have already
+        // stolen control on focus, so "controlling" is not the criterion.
+        if (!this.ended && this.stateProvider) {
+          this.transport.post({
+            type: 'welcome',
+            tab: this.tab,
+            instanceId: this.instanceId,
+            targetInstanceId: message.instanceId,
+            state: this.stateProvider(),
+          })
+        }
+        return
+      case 'welcome':
+        // Control is not touched here: focus already decides who controls,
+        // and the joiner is the tab the user just opened and focused.
+        if (message.targetInstanceId !== this.instanceId) return
+        this.handlers.onWelcome?.(message)
+        return
+      case 'ended':
+        if (message.instanceId === this.instanceId || this.ended) return
+        this.ended = true
+        if (this.controlling) {
+          this.controlling = false
+          this.handlers.onControlChange?.(false)
+        }
+        this.handlers.onEnded?.(message)
+        return
+      default:
+        break
+    }
+
     if (message.tab === this.tab) return
     switch (message.type) {
       case 'control':

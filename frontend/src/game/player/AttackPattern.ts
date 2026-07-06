@@ -8,10 +8,14 @@ export interface CastContext {
   player: Player
   /** Normalised direction from the player toward the mouse. */
   aim: Phaser.Math.Vector2
+  /** The mouse position in world coordinates at cast time. */
+  aimPoint: Phaser.Math.Vector2
   /** Horizontal input at cast time: -1, 0 or 1. */
   moveDir: -1 | 0 | 1
   /** Physics group that player attacks spawn into (collides with enemies). */
   projectiles: Phaser.Physics.Arcade.Group
+  /** True when replaying the other tab's cast — visuals only, no boss damage. */
+  remote: boolean
 }
 
 /**

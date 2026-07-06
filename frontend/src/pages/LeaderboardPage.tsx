@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../app/api'
 import { formatDuration } from '../lib/format'
+import PageBackdrop from './PageBackdrop'
 
 interface LeaderboardEntry {
   username: string
@@ -23,11 +24,17 @@ export default function LeaderboardPage() {
 
   return (
     <main className="page">
-      <h1>Leaderboard</h1>
+      <PageBackdrop src="/images/umbreon-eevee-leaderboard.png" shiftY={-100} />
+      <h1 className="mantinia">Leaderboard</h1>
       {error && <p className="form-error">{error}</p>}
+      {!entries && !error && (
+        <div className="loading-overlay" role="status">
+          <div className="loading-box">Loading…</div>
+        </div>
+      )}
       {entries && (
         <div className="table-wrap">
-          <table className="leaderboard">
+          <table className="leaderboard glass">
             <thead>
               <tr>
                 <th>#</th>
@@ -51,7 +58,7 @@ export default function LeaderboardPage() {
           </table>
         </div>
       )}
-      <Link className="button-link secondary" to="/lobby">
+      <Link className="button-link secondary glass" to="/lobby">
         Back to lobby
       </Link>
     </main>

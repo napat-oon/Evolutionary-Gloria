@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../app/AuthContext'
+import PageBackdrop from './PageBackdrop'
 
 export default function RegisterPage() {
   const { register } = useAuth()
@@ -33,8 +34,9 @@ export default function RegisterPage() {
 
   return (
     <main className="page">
+      <PageBackdrop src="/images/eevee-evolutions-wallpaper.png" shiftY={-530} />
       <h1 className="game-title">Evolutionary Gloria</h1>
-      <form className="auth-card" onSubmit={onSubmit}>
+      <form className="auth-card glass" onSubmit={onSubmit}>
         <h2>Register</h2>
         {error && <p className="form-error">{error}</p>}
         <label>

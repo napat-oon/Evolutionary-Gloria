@@ -14,6 +14,7 @@ function spawnProjectile(
 ): Phaser.Physics.Arcade.Image {
   const projectile = ctx.projectiles.create(x, y, texture) as Phaser.Physics.Arcade.Image
   projectile.setData('damage', damage)
+  if (ctx.remote) projectile.setData('remote', true)
   const body = projectile.body as Phaser.Physics.Arcade.Body
   body.setAllowGravity(false)
   projectile.setVelocity(velocity.x, velocity.y)
@@ -41,7 +42,10 @@ class StarShotgun implements AttackPattern {
   }
 }
 
-/** Right click while moving: morph into water and rush in that direction. */
+/**
+ * Right click while moving: morph into water and rush in that direction,
+ * shrinking to ~1/5 size — small enough to slip under the arena walls.
+ */
 class WaterRush implements AttackPattern {
   readonly id = 'water-rush' as const
   readonly manaCost = 20
@@ -51,6 +55,7 @@ class WaterRush implements AttackPattern {
     ctx.player.lockFor(320)
     ctx.player.setTint(0x53a8ff)
     ctx.player.setInvulnerable(320)
+    ctx.player.setScale(0.2)
     ctx.player.setVelocity(dir * 560, 0)
     const trail = ctx.scene.time.addEvent({
       delay: 40,
@@ -63,6 +68,7 @@ class WaterRush implements AttackPattern {
     ctx.scene.time.delayedCall(320, () => {
       trail.remove()
       ctx.player.clearTint()
+      ctx.player.setScale(1)
     })
   }
 }
@@ -127,6 +133,8 @@ class DarkSwing implements AttackPattern {
       if (!ctx.player.active) return
       const aoe = ctx.projectiles.create(ctx.player.x, ctx.player.y, TEX.aoe) as Phaser.Physics.Arcade.Image
       aoe.setData('damage', 24)
+      if (ctx.remote) aoe.setData('remote', true)
+      aoe.setScale(1.9, 1) // wide swing reaching out to both sides
       ;(aoe.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
       ctx.scene.tweens.add({ targets: aoe, alpha: { from: 0.9, to: 0 }, duration: 300 })
       ctx.scene.time.delayedCall(300, () => aoe.destroy())
@@ -141,15 +149,20 @@ class LeafBlade implements AttackPattern {
 
   cast(ctx: CastContext): void {
     const spawnX = ctx.player.x + (ctx.moveDir || ctx.player.facing) * 60
-    const leaf = ctx.scene.physics.add.image(spawnX, ctx.player.y - 40, TEX.leaf)
+    const spawnY = ctx.player.y - 40
+    const leaf = ctx.scene.physics.add.image(spawnX, spawnY, TEX.leaf)
     ;(leaf.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
     ctx.scene.tweens.add({ targets: leaf, y: '-=8', yoyo: true, repeat: 3, duration: 120 })
-    const aim = ctx.aim.clone()
+    // Strike straight at where the mouse pointed, not offset by the leaf's
+    // hover height — measured from the leaf itself.
+    const target = ctx.aimPoint.clone()
     ctx.scene.time.delayedCall(650, () => {
       if (!leaf.active) return
       leaf.destroy()
-      const velocity = aim.scale(620)
-      spawnProjectile(ctx, TEX.leaf, spawnX, ctx.player.y - 40, velocity, 600, 22)
+      const velocity = new Phaser.Math.Vector2(target.x - spawnX, target.y - spawnY)
+      if (velocity.lengthSq() === 0) velocity.set(ctx.player.facing, 0)
+      velocity.normalize().scale(620)
+      spawnProjectile(ctx, TEX.leaf, spawnX, spawnY, velocity, 600, 22)
     })
   }
 }
@@ -173,7 +186,7 @@ class TwinRibbons implements AttackPattern {
   }
 }
 
-/** Ctrl + Right click + S: stomp and send icicle spears up through the floors. */
+/** Ctrl + Right click + S: stomp and rain icicle spears down through the floors. */
 class IcicleStomp implements AttackPattern {
   readonly id = 'icicle-stomp' as const
   readonly manaCost = 30
@@ -184,15 +197,17 @@ class IcicleStomp implements AttackPattern {
     player.setVelocity(0, 240)
     ctx.scene.time.delayedCall(250, () => {
       if (!player.active) return
-      const groundY = player.y + 14
+      const startY = player.y + 14
       for (let i = 0; i < 5; i++) {
         const x = player.x - 90 + i * 45
         ctx.scene.time.delayedCall(i * 60, () => {
-          const icicle = ctx.projectiles.create(x, groundY + 20, TEX.icicle) as Phaser.Physics.Arcade.Image
+          const icicle = ctx.projectiles.create(x, startY, TEX.icicle) as Phaser.Physics.Arcade.Image
           icicle.setData('damage', 16)
+          if (ctx.remote) icicle.setData('remote', true)
+          icicle.setFlipY(true) // point downward
           ;(icicle.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
-          icicle.setVelocity(0, -260)
-          ctx.scene.time.delayedCall(450, () => icicle.destroy())
+          icicle.setVelocity(0, 340)
+          ctx.scene.time.delayedCall(900, () => icicle.destroy())
         })
       }
     })

@@ -31,6 +31,8 @@ export interface CastMessage {
   tab: TabId
   ability: AbilityId
   aim: { x: number; y: number }
+  /** Mouse position in world coordinates (mouse-homing abilities need it). */
+  aimPoint: { x: number; y: number }
   moveDir: -1 | 0 | 1
 }
 
@@ -54,6 +56,8 @@ export interface DamageMessage {
   tab: TabId
   amount: number
   eventId: string
+  /** True for damage that ignores dodge i-frames (the twins' ultimate). */
+  force?: boolean
 }
 
 /** Sent when a tab takes control of the character (usually on focus). */
@@ -85,6 +89,42 @@ export interface FightMessage {
   phase: 'intro' | 'start' | 'ultimate' | 'victory' | 'defeat'
 }
 
+/** Everything a late-joining tab needs to adopt the running session. */
+export interface SessionState {
+  scene: string
+  phase: 'intro' | 'fighting' | 'ultimate'
+  bossHp: number
+  stars: StarColor[]
+  vitals: VitalsSnapshot
+  /** Player position, so the joiner doesn't yank Eevee back to the spawn. */
+  x: number
+  y: number
+}
+
+/** A newly opened tab asks whoever runs the session for its state. */
+export interface HelloMessage {
+  type: 'hello'
+  tab: TabId
+  instanceId: string
+}
+
+/** The controlling tab answers a hello with the live session state. */
+export interface WelcomeMessage {
+  type: 'welcome'
+  tab: TabId
+  instanceId: string
+  targetInstanceId: string
+  state: SessionState
+}
+
+/** The session is over for everyone (a tab left for the lobby). */
+export interface EndedMessage {
+  type: 'ended'
+  tab: TabId
+  instanceId: string
+  reason: 'left'
+}
+
 export type SyncMessage =
   | PoseMessage
   | CastMessage
@@ -95,9 +135,13 @@ export type SyncMessage =
   | BossHpMessage
   | StarMessage
   | FightMessage
+  | HelloMessage
+  | WelcomeMessage
+  | EndedMessage
 
 const MESSAGE_TYPES = new Set([
   'pose', 'cast', 'melee', 'windup', 'damage', 'control', 'boss-hp', 'star', 'fight',
+  'hello', 'welcome', 'ended',
 ])
 
 export function isSyncMessage(value: unknown): value is SyncMessage {
