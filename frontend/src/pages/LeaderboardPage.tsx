@@ -24,7 +24,7 @@ export default function LeaderboardPage() {
 
   return (
     <main className="page">
-      <PageBackdrop src="/images/umbreon-eevee-leaderboard.png" shiftY={-100} />
+      <PageBackdrop src="/images/umbreon-eevee-leaderboard.png" shiftY={-400} />
       <h1 className="mantinia">Leaderboard</h1>
       {error && <p className="form-error">{error}</p>}
       {!entries && !error && (

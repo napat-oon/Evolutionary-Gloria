@@ -11,10 +11,12 @@ const DASH_SPEED = 520
 const DASH_MS = 240
 const DASH_COOLDOWN_MS = 800
 const COMBO_WINDOW_MS = 420
-const COMBO_DAMAGE = [8, 8, 14]
-const MELEE_REACH = 52
+const COMBO_DAMAGE = [5, 5, 10]
+/** Total melee reach measured FROM Eevee's center along the aim. */
+const MELEE_REACH = 42
+const MELEE_THICKNESS = 30
 const BLOCK_RADIUS = 46
-const BLOCK_HALF_ANGLE = Phaser.Math.DegToRad(55)
+const BLOCK_HALF_ANGLE = Phaser.Math.DegToRad(40)
 
 export interface PlayerKeys {
   left: Phaser.Input.Keyboard.Key
@@ -115,6 +117,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     body.moves = controlled
     if (controlled) {
       this.setVelocity(0, 0)
+      // Replayed casts leave visual-only state behind (fire-plunge wreath,
+      // locks); a tab gaining control must start from a clean slate or the
+      // stale plunge would fire the moment this tab is focused.
+      this.firePlunging = false
+      this.lockedUntil = 0
+      this.setGravityDisabled(false)
+      this.clearTint()
+      this.setScale(1)
     }
   }
 
@@ -172,6 +182,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.firePlunging = true
     this.setVelocity(0, 820)
     this.lockFor(2000)
+  }
+
+  get isFirePlunging(): boolean {
+    return this.firePlunging
   }
 
   /** Fire plunge or holding S + Space drops through passable platforms. */
@@ -317,21 +331,22 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   private spawnSlash(aim: Phaser.Math.Vector2, comboStep: number, remote = false): void {
     const damage = COMBO_DAMAGE[Math.min(comboStep, 3) - 1]
+    // The rectangle starts at Eevee's center and reaches MELEE_REACH out
+    // along the aim, so a swing away from a target can never clip it.
     const slash = this.projectiles.create(
-      this.x + aim.x * MELEE_REACH, this.y + aim.y * MELEE_REACH,
+      this.x + aim.x * (MELEE_REACH / 2), this.y + aim.y * (MELEE_REACH / 2),
       TEX.spark) as Phaser.Physics.Arcade.Image
     slash.setData('damage', damage)
     slash.setData('melee', true)
     if (remote) slash.setData('remote', true)
-    slash.setScale(comboStep === 3 ? 5 : 3.6, 1.9).setAlpha(0.85)
+    slash.setScale(MELEE_REACH / 8, comboStep === 3 ? 2.4 : 1.9).setAlpha(0.85)
     slash.setRotation(aim.angle())
     const body = slash.body as Phaser.Physics.Arcade.Body
     body.setAllowGravity(false)
-    // A long rectangle reaching out along the aim, not a point spark.
     if (Math.abs(aim.x) >= Math.abs(aim.y)) {
-      body.setSize(64, 30)
+      body.setSize(MELEE_REACH, MELEE_THICKNESS)
     } else {
-      body.setSize(30, 64)
+      body.setSize(MELEE_THICKNESS, MELEE_REACH)
     }
     this.scene.time.delayedCall(110, () => slash.destroy())
   }

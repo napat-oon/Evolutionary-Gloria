@@ -44,6 +44,8 @@ body {
 .mantinia {
   font-family: mantinia, serif;
   font-weight: 400;
+  color: white;
+  text-shadow: 0 1px 6px #000000d9;
 }
 
 .game-title {
@@ -169,7 +171,8 @@ button:disabled {
   display: flex;
   gap: 1.25rem;
   margin-top: 0.4rem;
-  color: var(--muted);
+  color: white;
+  text-shadow: 0 1px 6px #000000d9;
   font-size: 1.05rem;
 }
 
@@ -221,6 +224,7 @@ button.secondary,
   height: 100%;
   object-fit: cover;
   transition: opacity 200ms ease;
+  filter: brightness(0.69);
 }
 
 .boss-card-art-hover {
@@ -405,6 +409,7 @@ button.glass,
 .button-link.glass,
 .leaderboard.glass {
   background: rgba(22, 26, 44, 0.1);
+  filter: drop-shadow(1px 1px 9px black);
 }
 
 .auth-card.glass input {

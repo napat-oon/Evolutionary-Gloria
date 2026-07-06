@@ -76,11 +76,17 @@ export default function PhaserGame({
     window.addEventListener('focus', claim)
     if (document.hasFocus()) tabSync.claimControl()
 
+    // Presence pings tell the other dimension this tab is still alive.
+    tabSync.startPresence()
+
     // Hidden tabs get no requestAnimationFrame, which froze the puppet
     // dimension until you tabbed back. A worker's timers keep firing while
-    // hidden, so we step the game manually from its heartbeat.
+    // hidden, so we step the game manually from its heartbeat. The same
+    // unthrottled clock also drives presence pings while hidden (window
+    // intervals slow to a crawl in background tabs).
     const ticker = new Worker('/tick-worker.js')
     ticker.onmessage = () => {
+      tabSync.heartbeat()
       if (document.hidden && !pausedRef.current && gameRef.current) {
         gameRef.current.step(performance.now(), BACKGROUND_STEP_MS)
       }

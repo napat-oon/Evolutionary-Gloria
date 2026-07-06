@@ -12,6 +12,9 @@ export class SceneSync {
   private readonly player: Player
   private readonly sync: TabSync
   private readonly debugWindupKey?: Phaser.Input.Keyboard.Key
+  /** Poses stream ~60/s; only the FIRST one may trigger the scene follow,
+   *  or the target scene restarts once per queued message. */
+  private followingScene = false
 
   constructor(scene: Phaser.Scene, player: Player, sync: TabSync) {
     this.scene = scene
@@ -28,7 +31,9 @@ export class SceneSync {
       onPose: (message) => {
         if (!player.active) return
         if (message.scene !== scene.scene.key) {
-          // The controller moved to another room; follow it.
+          // The controller moved to another room; follow it (once).
+          if (this.followingScene) return
+          this.followingScene = true
           scene.registry.set('potions', message.vitals.potions)
           scene.scene.start(message.scene)
           return

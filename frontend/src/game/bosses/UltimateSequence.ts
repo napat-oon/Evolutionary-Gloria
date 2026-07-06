@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { debugHitShape } from '../core/hitboxDebug'
 import { TEX } from '../core/textures'
 import type { BossArena } from './BossBase'
 import { BossBase } from './BossBase'
@@ -63,18 +64,26 @@ export class UltimateSequence {
       player.setVelocity(0, 0)
     }
 
-    const floatX = boss.starColor === 'jade'
-      ? layout.centerX - 540 // Sirius floats left
-      : layout.centerX + 540 // Orion floats right
+    const float = this.floatTarget()
     scene.tweens.chain({
       targets: boss,
       tweens: [
         { scaleY: 0.7, duration: 180 },
         { scaleY: 1, y: boss.y - 130, angle: 360, duration: 420, ease: 'Cubic.easeOut' },
-        { x: floatX, y: 140, duration: 500, ease: 'Sine.easeInOut' },
+        { x: float.x, y: float.y, duration: 500, ease: 'Sine.easeInOut' },
       ],
       onComplete: () => this.floatAndTrack(),
     })
+  }
+
+  /** Hover anchor pinned to the camera view, so the twin never floats
+   *  off-screen while the camera follows the player. */
+  private floatTarget(): { x: number; y: number } {
+    const view = this.scene.cameras.main.worldView
+    return {
+      x: this.boss.starColor === 'jade' ? view.left + 170 : view.right - 170,
+      y: view.top + 120,
+    }
   }
 
   private floatAndTrack(): void {
@@ -84,12 +93,14 @@ export class UltimateSequence {
     scene.tweens.add({
       targets: this.smoke, alpha: { from: 0.9, to: 0.4 }, yoyo: true, repeat: -1, duration: 350,
     })
-    // Track the player's x while floating.
+    // Stay glued to the camera view edge while floating.
     this.hover = scene.time.addEvent({
       delay: 40,
       loop: true,
       callback: () => {
-        boss.x = Phaser.Math.Linear(boss.x, this.arena.player.x, 0.03)
+        const target = this.floatTarget()
+        boss.x = Phaser.Math.Linear(boss.x, target.x, 0.12)
+        boss.y = Phaser.Math.Linear(boss.y, target.y, 0.12)
         this.smoke?.setPosition(boss.x, boss.y)
       },
     })
@@ -113,7 +124,6 @@ export class UltimateSequence {
     const { scene, boss } = this
     const targetX = this.arena.player.x
     const targetY = this.arena.player.y
-    const returnY = 140
     const flash = scene.add.image(boss.x, boss.y, TEX.spark)
       .setTint(star === 'jade' ? SIRIUS_TINT : ORION_TINT).setScale(3)
     scene.tweens.add({ targets: flash, alpha: 0, duration: 250, onComplete: () => flash.destroy() })
@@ -125,6 +135,7 @@ export class UltimateSequence {
       duration: 360,
       ease: 'Cubic.easeIn',
       onComplete: () => {
+        debugHitShape(scene, (g) => g.strokeCircle(boss.x, boss.y, 75))
         if (Phaser.Math.Distance.Between(
             this.arena.player.x, this.arena.player.y, boss.x, boss.y) < 75) {
           // Undodgable — only the shield arc (or a wall) helps.
@@ -132,7 +143,7 @@ export class UltimateSequence {
         }
         scene.tweens.add({
           targets: boss,
-          y: returnY,
+          y: this.floatTarget().y,
           duration: 320,
           ease: 'Sine.easeOut',
           onComplete: () => scene.time.delayedCall(260, () => this.diveNext()),
@@ -144,8 +155,11 @@ export class UltimateSequence {
   private finale(): void {
     const { scene, boss, layout } = this
     this.hover?.remove()
-    const centerX = layout.centerX
-    const centerY = 200
+    // Clash where the player can see it: the middle of the camera view,
+    // brought down near the ground instead of high in the sky.
+    const view = scene.cameras.main.worldView
+    const centerX = view.centerX
+    const centerY = Math.max(view.top + 150, layout.groundY - 240)
 
     // The twin from the other dimension appears for the clash.
     const ghostTint = boss.starColor === 'jade' ? ORION_TINT : SIRIUS_TINT
@@ -172,6 +186,10 @@ export class UltimateSequence {
           scene.cameras.main.shake(400, 0.02)
           const player = this.arena.player
           // Only the outer sides of the two cover walls are safe.
+          debugHitShape(scene, (g) => g.strokeRect(
+            layout.leftWallX - 18, 0,
+            layout.rightWallX + 18 - (layout.leftWallX - 18), layout.worldHeight,
+          ), 900, 0xff3030)
           const shielded =
             player.x < layout.leftWallX - 18 || player.x > layout.rightWallX + 18
           if (!shielded) {

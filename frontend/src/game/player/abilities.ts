@@ -68,7 +68,11 @@ class WaterRush implements AttackPattern {
     ctx.scene.time.delayedCall(320, () => {
       trail.remove()
       ctx.player.clearTint()
+      // Regrow from the feet, not the center pixel: expanding around the
+      // center pushed the lower half through the floor Eevee stood on.
+      const heightBefore = ctx.player.displayHeight
       ctx.player.setScale(1)
+      ctx.player.y -= (ctx.player.displayHeight - heightBefore) / 2
     })
   }
 }
@@ -80,14 +84,15 @@ class ElectricDive implements AttackPattern {
 
   cast(ctx: CastContext): void {
     const player = ctx.player
-    player.lockFor(1250)
+    player.lockFor(1060)
     player.setVelocity(0, -480)
     ctx.scene.time.delayedCall(240, () => {
       if (!player.active) return
       player.setGravityDisabled(true)
       player.setVelocity(0, 0)
       player.setTint(0xfff35c)
-      ctx.scene.time.delayedCall(700, () => {
+      // 240ms rise + this hover = 0.75s total before the strike.
+      ctx.scene.time.delayedCall(510, () => {
         if (!player.active) return
         player.setGravityDisabled(false)
         player.clearTint()
@@ -110,31 +115,75 @@ class ElectricDive implements AttackPattern {
 class FirePlunge implements AttackPattern {
   readonly id = 'fire-plunge' as const
   readonly manaCost = 25
+  private static readonly PATH_DAMAGE = 20
 
   cast(ctx: CastContext): void {
     const player = ctx.player
-    player.lockFor(220)
     player.setTint(0xff7a3c)
+    if (ctx.remote) {
+      // Puppet tabs: the pose stream moves the sprite — replaying the real
+      // plunge left stale locked/plunging state that "executed" on focus.
+      // The wreath is enough; clear it when the plunge would have ended.
+      ctx.scene.time.delayedCall(1200, () => {
+        if (player.active && !player.isControlled) player.clearTint()
+      })
+      return
+    }
+    player.lockFor(220)
     ctx.scene.time.delayedCall(220, () => {
       if (!player.active) return
       player.beginFirePlunge() // interruptible by any input; keeps momentum
+      // A fiery hitbox rides along and burns whatever the plunge passes.
+      const flame = ctx.projectiles.create(player.x, player.y, TEX.spark) as Phaser.Physics.Arcade.Image
+      flame.setData('damage', FirePlunge.PATH_DAMAGE)
+      flame.setTint(0xff7a3c).setScale(3.4).setAlpha(0.7)
+      ;(flame.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
+      const follow = ctx.scene.time.addEvent({
+        delay: 30,
+        loop: true,
+        callback: () => {
+          if (!flame.active || !player.active || !player.isFirePlunging) {
+            follow.remove()
+            if (flame.active) flame.destroy()
+            return
+          }
+          flame.setPosition(player.x, player.y)
+        },
+      })
     })
   }
 }
 
-/** Ctrl + Right click standing still: quick charge, dark oval swing around self. */
+/**
+ * Ctrl + Right click standing still: quick charge, dark oval swing around
+ * self. Landing a hit escalates the NEXT swing through three states —
+ * wider and stronger each time — and a state-3 hit cycles back to state 1.
+ * Misses keep the current state.
+ */
 class DarkSwing implements AttackPattern {
   readonly id = 'dark-swing' as const
   readonly manaCost = 30
+  /** Per-state horizontal scale (96px aoe texture) and damage. */
+  private static readonly SCALE_X = [1.9, 2.6, 3.8]
+  private static readonly DAMAGE = [24, 48, 96]
+
+  private state = 0
 
   cast(ctx: CastContext): void {
     ctx.player.lockFor(450)
     ctx.scene.time.delayedCall(200, () => {
       if (!ctx.player.active) return
       const aoe = ctx.projectiles.create(ctx.player.x, ctx.player.y, TEX.aoe) as Phaser.Physics.Arcade.Image
-      aoe.setData('damage', 24)
-      if (ctx.remote) aoe.setData('remote', true)
-      aoe.setScale(1.9, 1) // wide swing reaching out to both sides
+      aoe.setData('damage', DarkSwing.DAMAGE[this.state])
+      if (ctx.remote) {
+        aoe.setData('remote', true)
+      } else {
+        // Scenes invoke onHit when this swing actually connects.
+        aoe.setData('onHit', () => {
+          this.state = (this.state + 1) % DarkSwing.SCALE_X.length
+        })
+      }
+      aoe.setScale(DarkSwing.SCALE_X[this.state], 1) // wide swing to both sides
       ;(aoe.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
       ctx.scene.tweens.add({ targets: aoe, alpha: { from: 0.9, to: 0 }, duration: 300 })
       ctx.scene.time.delayedCall(300, () => aoe.destroy())

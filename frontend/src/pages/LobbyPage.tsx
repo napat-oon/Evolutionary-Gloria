@@ -11,11 +11,18 @@ export default function LobbyPage() {
     navigate('/login')
   }
 
+  /** The duo fight needs both dimensions: open tab 2 (a user-gesture popup,
+   *  so it isn't blocked), then take this tab into dimension 1. */
+  function startFight() {
+    window.open('/game?tab=2', '_blank')
+    navigate('/game')
+  }
+
   if (!user) return null
 
   return (
     <main className="page lobby">
-      <PageBackdrop src="/images/eevee-evolutions-wallpaper.png" shiftY={-165} />
+      <PageBackdrop src="/images/eevee-evolutions-wallpaper.png" shiftY={-165} brightness={0.85} />
       <header className="lobby-header">
         <div>
           <h1 className="mantinia">{user.username}</h1>
@@ -37,7 +44,7 @@ export default function LobbyPage() {
 
       <section className="boss-select">
         <h2 className="mantinia">Boss Fights</h2>
-        <button className="boss-card" onClick={() => navigate('/game')}>
+        <button className="boss-card" onClick={startFight}>
           <img className="boss-card-art" src="/images/sirius-orion-icon.png" alt="" />
           <img className="boss-card-art boss-card-art-hover" src="/images/sirius-orion-hovered.png" alt="" />
           <span className="boss-card-title">SIRIUS &amp; ORION</span>

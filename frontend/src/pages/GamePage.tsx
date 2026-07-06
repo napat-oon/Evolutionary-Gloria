@@ -78,9 +78,12 @@ export default function GamePage() {
   const matchIdRef = useRef<number | null>(null)
   const [result, setResult] = useState<MatchResultView | null>(null)
   const [loggedOut, setLoggedOut] = useState(false)
-  // Another tab of this session left for the lobby: the session is over
-  // everywhere, so this tab only offers to close itself.
-  const [sessionEnded, setSessionEnded] = useState(false)
+  // The session ends for everyone the moment any tab leaves or closes.
+  const [endedReason, setEndedReason] = useState<'left' | 'closed' | null>(null)
+  // Strict duo rule: the game stays paused until the other dimension's tab
+  // is open and pinging.
+  const [peerPresent, setPeerPresent] = useState(false)
+  const peerWasPresent = useRef(false)
 
   // One sync session per mount. Created in the effect (not useMemo) so React
   // StrictMode's mount/unmount/mount cycle gets a fresh, un-disposed channel.
@@ -102,8 +105,37 @@ export default function GamePage() {
     return () => channel.close()
   }, [])
 
+  // Presence of the other dimension. Losing a peer that was present means
+  // its tab was closed (or crashed): seal the session everywhere.
+  useEffect(() => {
+    if (!tabSync) return
+    tabSync.onPeerPresence = (present) => {
+      setPeerPresent(present)
+      if (present) {
+        peerWasPresent.current = true
+      } else if (peerWasPresent.current && !tabSync.isEnded) {
+        tabSync.publishEnded('closed')
+        setEndedReason('closed')
+      }
+    }
+    return () => {
+      tabSync.onPeerPresence = undefined
+    }
+  }, [tabSync])
+
+  // Closing (or refreshing) a tab ends the session for every other tab too.
+  useEffect(() => {
+    if (!tabSync) return
+    const onPageHide = () => tabSync.publishEnded('closed')
+    window.addEventListener('pagehide', onPageHide)
+    return () => window.removeEventListener('pagehide', onPageHide)
+  }, [tabSync])
+
   const onShopOpen = useCallback(() => setShopOpen(true), [])
-  const onSessionEnded = useCallback(() => setSessionEnded(true), [])
+  const onSessionEnded = useCallback(
+    (reason: string) => setEndedReason(reason === 'closed' ? 'closed' : 'left'),
+    [],
+  )
 
   // Mirror tabs don't own the server match, but they still show the outcome.
   const onFightEnded = useCallback(
@@ -192,7 +224,7 @@ export default function GamePage() {
         <PhaserGame
           potions={potions}
           tabSync={tabSync}
-          paused={loggedOut || sessionEnded}
+          paused={loggedOut || endedReason !== null || (!peerPresent && !result)}
           onShopOpen={onShopOpen}
           onPotionsUsed={onPotionsUsed}
           onWindup={onWindup}
@@ -204,9 +236,6 @@ export default function GamePage() {
       )}
 
       <div className="corner corner-tl">
-        <button className="secondary" onClick={openOtherTab}>
-          ⧉ Open Dimension {otherTab(tab)}
-        </button>
         <span className="dimension-badge" style={{ color: TAB_BOSS_COLOR[tab] }}>
           {tab === 1 ? "Sirius's Dimension" : "Orion's Dimension"}
         </span>
@@ -243,23 +272,49 @@ export default function GamePage() {
         </div>
       )}
 
-      {sessionEnded && !loggedOut && (
+      {endedReason && !loggedOut && !result && (
         <div className="shop-overlay translucent" role="dialog">
           <div className="shop-modal">
             <h2>Session ended</h2>
             <p>
-              The player left to the lobby from another tab, so this dimension
-              has been sealed. Close this tab — start the next fight from the
-              lobby.
+              {endedReason === 'left'
+                ? 'The player left to the lobby from another tab, so this dimension has been sealed.'
+                : 'The other dimension was closed, so this session has been sealed. The twins must be fought in both dimensions at once.'}{' '}
+              Start the next fight from the lobby.
             </p>
             <div className="shop-actions">
-              <button onClick={() => window.close()}>Close this tab</button>
+              {tab === 1 ? (
+                <Link className="button-link" to="/lobby">
+                  Back to lobby
+                </Link>
+              ) : (
+                <button onClick={() => window.close()}>Close this tab</button>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {result && !loggedOut && !sessionEnded && (
+      {!peerPresent && !endedReason && !loggedOut && !result && (
+        <div className="shop-overlay translucent" role="dialog">
+          <div className="shop-modal">
+            <h2>Waiting for Dimension {otherTab(tab)}…</h2>
+            <p>
+              The twins exist in two dimensions at once — the fight only runs
+              while both tabs are open.
+            </p>
+            <div className="shop-actions">
+              {tab === 1 ? (
+                <button onClick={openOtherTab}>⧉ Open Dimension 2</button>
+              ) : (
+                <button onClick={() => window.close()}>Close this tab</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {result && !loggedOut && (
         <div className="shop-overlay" role="dialog">
           <div className="shop-modal result-modal">
             <h2>{result.victory ? 'VICTORY' : 'DEFEAT'}</h2>

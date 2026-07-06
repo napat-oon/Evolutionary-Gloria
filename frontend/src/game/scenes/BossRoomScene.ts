@@ -6,6 +6,7 @@ import type { StarColor } from '../bosses/ConstellationTracker'
 import { Orion, ORION_TINT } from '../bosses/Orion'
 import { Sirius, SIRIUS_TINT } from '../bosses/Sirius'
 import { UltimateSequence } from '../bosses/UltimateSequence'
+import { setupHitboxDebug } from '../core/hitboxDebug'
 import { TEX } from '../core/textures'
 import { Player } from '../player/Player'
 import { SceneSync } from '../sync/SceneSync'
@@ -49,6 +50,10 @@ export class BossRoomScene extends Phaser.Scene {
     this.bossHp = BOSS_MAX_HP
     this.tracker.clear()
     this.ultimatePending = false
+    // Scene instances are reused across runs; the previous run's UI objects
+    // were destroyed on shutdown, so drop the stale references.
+    this.starDots = []
+    this.sparkles = []
     this.tabSync = this.registry.get('tabsync') as TabSync | undefined
 
     // A late-joining tab adopts the running fight instead of restarting it.
@@ -63,6 +68,7 @@ export class BossRoomScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, WIDTH, HEIGHT)
     this.cameras.main.setBounds(0, 0, WIDTH, HEIGHT)
     this.cameras.main.setBackgroundColor(this.tabSync?.tab === 2 ? '#160a12' : '#0a1612')
+    setupHitboxDebug(this)
 
     const solids = this.physics.add.staticGroup()
     for (let x = 32; x < WIDTH; x += 64) {
@@ -88,7 +94,8 @@ export class BossRoomScene extends Phaser.Scene {
     ]
     for (const [y, xs] of platformRows) {
       for (const x of xs) {
-        platforms.create(x, y, TEX.platform)
+        const platform = platforms.create(x, y, TEX.platform) as Phaser.Physics.Arcade.Image
+        platform.setScale(1.5, 1).refreshBody()
       }
     }
     for (const platform of platforms.getChildren()) {
@@ -138,12 +145,14 @@ export class BossRoomScene extends Phaser.Scene {
       if (!projectile.active || this.phase === 'victory' || this.phase === 'defeat') return
       const damage = (projectile.getData('damage') as number | undefined) ?? 8
       const remote = projectile.getData('remote') === true
+      const onHit = projectile.getData('onHit') as (() => void) | undefined
       if (projectile.getData('melee') && !remote) {
         this.player.vitals.restoreManaFromHit()
       }
       projectile.destroy()
       this.tweens.add({ targets: this.boss, alpha: { from: 0.5, to: 1 }, duration: 120 })
       if (remote) return
+      onHit?.()
       this.damageBoss(damage * arena.bossDamageMultiplier)
       this.events.emit('boss:damaged')
     })
@@ -179,13 +188,19 @@ export class BossRoomScene extends Phaser.Scene {
           scene.player.takeDamage(amount, options?.undodgeable ?? false)
         }
       },
-      addStar: (color: StarColor) => this.addStar(color, true),
+      addStar: (color: StarColor) => this.addStar(color),
     }
   }
 
   private attachBossSyncHandlers(sync: TabSync): void {
     // SceneSync owns the core handlers; the boss fight adds its own on top.
-    sync.handlers.onStar = (message) => this.addStar(message.color, false)
+    // Star updates carry the whole constellation: adopt it verbatim so the
+    // tabs can never drift apart (incremental adds raced and diverged).
+    sync.handlers.onStar = (message) => {
+      if (this.phase !== 'fighting' && this.phase !== 'intro') return
+      this.tracker.restore(message.stars)
+      this.renderConstellation()
+    }
     sync.handlers.onBossHp = (message) => {
       this.bossHp = message.hp
       this.updateBossBar()
@@ -300,11 +315,12 @@ export class BossRoomScene extends Phaser.Scene {
     }
   }
 
-  private addStar(color: StarColor, broadcast: boolean): void {
+  /** This dimension's boss earned a star; sync the whole list across tabs. */
+  private addStar(color: StarColor): void {
     // Stars land during the intro too — the tabs' intros aren't in lockstep.
     if (this.phase !== 'fighting' && this.phase !== 'intro') return
     if (!this.tracker.add(color)) return
-    if (broadcast) this.tabSync?.publishStar(color)
+    this.tabSync?.publishStars([...this.tracker.list()])
     this.renderConstellation()
     if (this.tracker.isFull && !this.ultimatePending) {
       this.time.delayedCall(900, () => this.startUltimate(true))

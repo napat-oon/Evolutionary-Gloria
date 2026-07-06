@@ -30,6 +30,10 @@ export interface TabSyncHandlers {
   onEnded?: (message: EndedMessage) => void
 }
 
+/** How often a tab pings, and how long peer silence means "gone". */
+const PING_INTERVAL_MS = 500
+const PEER_TIMEOUT_MS = 4000
+
 /**
  * Session orchestrator for one tab. Exactly one tab controls the character
  * at a time (single writer for vitals); control follows window focus.
@@ -41,6 +45,9 @@ export class TabSync {
   handlers: TabSyncHandlers = {}
   /** Set by the active scene; answers late-joining tabs' hello with state. */
   stateProvider?: () => SessionState
+  /** Fired when the other dimension appears or its heartbeat goes silent.
+   *  Kept outside `handlers` — scenes replace that object wholesale. */
+  onPeerPresence?: (present: boolean) => void
 
   private controlling: boolean
   private ended = false
@@ -48,6 +55,10 @@ export class TabSync {
   private readonly unsubscribe: () => void
   private readonly seenDamageIds = new Set<string>()
   private damageCounter = 0
+  private lastPingAt = 0
+  private lastPeerSeenAt = 0
+  private peerPresent = false
+  private presenceTimer: ReturnType<typeof setInterval> | undefined
 
   constructor(tab: TabId, transport: SyncTransport) {
     this.tab = tab
@@ -55,6 +66,37 @@ export class TabSync {
     // Tab 1 starts in control; tab 2 takes over the moment it gains focus.
     this.controlling = tab === 1
     this.unsubscribe = transport.subscribe((message) => this.receive(message))
+  }
+
+  /**
+   * Starts the ping/presence loop (not in the constructor so unit tests and
+   * non-game usages don't leak timers). The interval is throttled in hidden
+   * tabs, so hosts with a better clock (the worker heartbeat that steps a
+   * hidden game) should also call heartbeat() on their own cadence.
+   */
+  startPresence(): void {
+    if (this.presenceTimer) return
+    this.presenceTimer = setInterval(() => this.heartbeat(), PING_INTERVAL_MS)
+    this.heartbeat()
+  }
+
+  /** Ping (rate-limited) and re-evaluate whether the other tab is alive. */
+  heartbeat(): void {
+    const now = Date.now()
+    if (now - this.lastPingAt >= PING_INTERVAL_MS) {
+      this.lastPingAt = now
+      this.transport.post({ type: 'ping', tab: this.tab })
+    }
+    const present = this.lastPeerSeenAt > 0 && now - this.lastPeerSeenAt < PEER_TIMEOUT_MS
+    if (present !== this.peerPresent) {
+      this.peerPresent = present
+      this.onPeerPresence?.(present)
+    }
+  }
+
+  /** True while the other dimension's heartbeat is fresh. */
+  get isPeerPresent(): boolean {
+    return this.peerPresent
   }
 
   /** True once the session ended for everyone (someone left to the lobby). */
@@ -78,8 +120,9 @@ export class TabSync {
     this.transport.post({ type: 'hello', tab: this.tab, instanceId: this.instanceId })
   }
 
-  /** Everyone's session is over: the player left for the lobby. */
+  /** Everyone's session is over: a tab left for the lobby or was closed. */
   publishEnded(reason: EndedMessage['reason']): void {
+    if (this.ended) return
     this.ended = true
     this.transport.post({
       type: 'ended', tab: this.tab, instanceId: this.instanceId, reason,
@@ -120,9 +163,9 @@ export class TabSync {
     this.transport.post({ type: 'boss-hp', tab: this.tab, hp, maxHp })
   }
 
-  publishStar(color: StarMessage['color']): void {
-    const eventId = `${this.tab}-star-${Date.now()}-${this.damageCounter++}`
-    this.transport.post({ type: 'star', tab: this.tab, color, eventId })
+  /** Broadcasts the full constellation, so receivers adopt it verbatim. */
+  publishStars(stars: StarMessage['stars']): void {
+    this.transport.post({ type: 'star', tab: this.tab, stars })
   }
 
   publishFight(phase: FightMessage['phase']): void {
@@ -130,11 +173,18 @@ export class TabSync {
   }
 
   dispose(): void {
+    if (this.presenceTimer) clearInterval(this.presenceTimer)
     this.unsubscribe()
     this.transport.close()
   }
 
   private receive(message: SyncMessage): void {
+    // Any traffic from the other dimension counts as a sign of life.
+    if (message.tab !== this.tab) {
+      this.lastPeerSeenAt = Date.now()
+    }
+    if (message.type === 'ping') return
+
     // Session-lifecycle messages are keyed by instance, not dimension, so
     // duplicate tabs of the same dimension can still handshake and stop.
     switch (message.type) {

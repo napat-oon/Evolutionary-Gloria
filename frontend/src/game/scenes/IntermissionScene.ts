@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { setupHitboxDebug } from '../core/hitboxDebug'
 import { TEX } from '../core/textures'
 import { Player } from '../player/Player'
 import { SceneSync } from '../sync/SceneSync'
@@ -28,6 +29,7 @@ export class IntermissionScene extends Phaser.Scene {
   private dpsLastHitAt = 0
   private dpsText!: Phaser.GameObjects.Text
   private dpsPie!: Phaser.GameObjects.Graphics
+  private leavingToBossRoom = false
 
   constructor() {
     super('intermission')
@@ -43,9 +45,11 @@ export class IntermissionScene extends Phaser.Scene {
     this.dpsDamage = 0
     this.dpsFirstHitAt = 0
     this.dpsLastHitAt = 0
+    this.leavingToBossRoom = false
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
     this.cameras.main.setBackgroundColor('#0b0d17')
+    setupHitboxDebug(this)
 
     // Ground and platforms
     const solids = this.physics.add.staticGroup()
@@ -54,8 +58,10 @@ export class IntermissionScene extends Phaser.Scene {
     }
     // Low platforms — a default jump (no electric dive) clears them.
     const platforms = this.physics.add.staticGroup()
-    platforms.create(430, 410, TEX.platform)
-    platforms.create(620, 410, TEX.platform)
+    for (const x of [430, 620]) {
+      const platform = platforms.create(x, 410, TEX.platform) as Phaser.Physics.Arcade.Image
+      platform.setScale(1.5, 1).refreshBody()
+    }
     for (const platform of platforms.getChildren()) {
       const body = (platform as Phaser.Physics.Arcade.Image).body as Phaser.Physics.Arcade.StaticBody
       body.checkCollision.down = false
@@ -103,6 +109,7 @@ export class IntermissionScene extends Phaser.Scene {
       if (this.dpsFirstHitAt === 0) this.dpsFirstHitAt = now
       this.dpsLastHitAt = now
       this.dpsDamage += (image.getData('damage') as number | undefined) ?? 8
+      ;(image.getData('onHit') as (() => void) | undefined)?.()
       this.tweens.add({ targets: dummy, alpha: { from: 0.4, to: 1 }, duration: 150 })
       image.destroy()
     })
@@ -120,6 +127,10 @@ export class IntermissionScene extends Phaser.Scene {
     const door = this.add.zone(WORLD_WIDTH - 80, GROUND_Y - 40, 60, 90)
     this.physics.world.enable(door, Phaser.Physics.Arcade.STATIC_BODY)
     this.physics.add.overlap(this.player, door, () => {
+      // Only the controlling tab walks through the door — puppet tabs follow
+      // via the pose stream. The overlap fires every step, so start once.
+      if (!this.player.isControlled || this.leavingToBossRoom) return
+      this.leavingToBossRoom = true
       this.registry.set('potions', this.player.vitals.potions)
       this.scene.start('boss-room')
     })
@@ -158,8 +169,10 @@ export class IntermissionScene extends Phaser.Scene {
       this.dpsText.setText('')
       return
     }
+    // Divide by at least 1s — the first fraction of a second showed a burst
+    // as double its real DPS before settling.
     const elapsedSeconds = (now - this.dpsFirstHitAt) / 1000
-    const dps = this.dpsDamage / Math.max(0.5, elapsedSeconds)
+    const dps = this.dpsDamage / Math.max(1, elapsedSeconds)
     this.dpsText.setText(`DPS ${dps.toFixed(1)} · ${elapsedSeconds.toFixed(1)}s`)
     // The 5s pie empties clockwise from 12 o'clock.
     const start = -Math.PI / 2 + (1 - remaining) * Math.PI * 2

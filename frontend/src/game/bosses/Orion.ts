@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { debugHitShape } from '../core/hitboxDebug'
 import { TEX } from '../core/textures'
 import type { BossArena, SpecialAttack } from './BossBase'
 import { BossBase } from './BossBase'
@@ -33,6 +34,11 @@ class DashSwipe implements SpecialAttack {
           scene.tweens.add({
             targets: area, alpha: 0, duration: 260,
             onComplete: () => area.destroy(),
+          })
+          // Debug: the oval reach, with the flat back edge marked on Orion.
+          debugHitShape(scene, (g) => {
+            g.strokeEllipse(boss.x, boss.y, DashSwipe.REACH_X * 2, DashSwipe.REACH_Y * 2)
+            g.lineBetween(boss.x, boss.y - DashSwipe.REACH_Y, boss.x, boss.y + DashSwipe.REACH_Y)
           })
           const dx = arena.player.x - boss.x
           const dy = arena.player.y - boss.y
@@ -89,6 +95,7 @@ class ExplosiveShell implements SpecialAttack {
         const blast = scene.add.image(boss.x, boss.y, TEX.aoe)
         blast.setTint(0xff7a3c).setScale(2.6, 2.2)
         scene.tweens.add({ targets: blast, alpha: 0, duration: 350, onComplete: () => blast.destroy() })
+        debugHitShape(scene, (g) => g.strokeCircle(boss.x, boss.y, 150))
         if (Phaser.Math.Distance.Between(arena.player.x, arena.player.y, boss.x, boss.y) < 150) {
           arena.hitPlayer(22, { x: boss.x, y: boss.y })
         }
@@ -122,6 +129,10 @@ class BlackHole implements SpecialAttack {
       callback: () => {
         const player = arena.player
         const distance = Phaser.Math.Distance.Between(player.x, player.y, hole.x, hole.y)
+        debugHitShape(scene, (g) => {
+          g.strokeCircle(hole.x, hole.y, 240) // pull radius
+          g.strokeCircle(hole.x, hole.y, 46) // grind radius
+        }, 60)
         if (distance < 240 && player.isControlled) {
           const toHole = new Phaser.Math.Vector2(hole.x - player.x, hole.y - player.y).normalize()
           const body = player.body as Phaser.Physics.Arcade.Body
@@ -130,7 +141,8 @@ class BlackHole implements SpecialAttack {
         }
         if (distance < 46 && scene.time.now - lastTick > 500) {
           lastTick = scene.time.now
-          arena.hitPlayer(6, { x: hole.x, y: hole.y })
+          // The grind ignores the shield arc; dash i-frames still avoid it.
+          arena.hitPlayer(6, { x: hole.x, y: hole.y }, { unblockable: true })
         }
       },
     })

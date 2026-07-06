@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { debugHitShape } from '../core/hitboxDebug'
 import { TEX } from '../core/textures'
 import type { Player } from '../player/Player'
 import type { StarColor } from './ConstellationTracker'
@@ -37,10 +38,45 @@ const MELEE_RANGE = 110
 const MELEE_DAMAGE = 14
 const WAVE_DAMAGE = 10
 const MOVE_SPEED = 120
-/** The twins take turns: one attacks while the other floats away. Both tabs
- *  share the machine's wall clock, so no sync messages are needed. */
-const TURN_MS = 8000
+/** Turn-start swoop toward Eevee: fast, but stops at a standoff distance. */
+const APPROACH_SPEED = 360
+const APPROACH_STANDOFF = 100
+const APPROACH_MS = 900
+/** The twins take turns in random 5–8s slots. Both tabs derive the same
+ *  slot schedule from the machine's wall clock, so no sync messages are
+ *  needed (see turnParityAt). */
+const TURN_MIN_MS = 5000
+const TURN_MAX_MS = 8000
+const HOUR_MS = 3600000
 const RETREAT_Y = 150
+const RETREAT_SPEED_X = 150
+const RETREAT_SPEED_Y = 220
+
+/** Stable hash → [0, 1): the same (hour, slot) gives the same duration. */
+function slotDuration(hour: number, slot: number): number {
+  let a = (Math.imul(hour, 374761393) + Math.imul(slot, 668265263)) >>> 0
+  a = Math.imul(a ^ (a >>> 13), 1274126177) >>> 0
+  const r = ((a ^ (a >>> 16)) >>> 0) / 4294967296
+  return TURN_MIN_MS + r * (TURN_MAX_MS - TURN_MIN_MS)
+}
+
+/**
+ * Whose turn is it at wall-clock `now`? Slot boundaries are the cumulative
+ * pseudo-random durations from the top of the hour, so every tab on the
+ * machine computes the identical schedule with no messages exchanged.
+ */
+function turnParityAt(now: number): 0 | 1 {
+  const hour = Math.floor(now / HOUR_MS)
+  let boundary = hour * HOUR_MS
+  let slot = 0
+  for (;;) {
+    const duration = slotDuration(hour, slot)
+    if (boundary + duration > now) break
+    boundary += duration
+    slot++
+  }
+  return ((hour + slot) % 2) as 0 | 1
+}
 
 /**
  * Shared behaviour for Sirius and Orion: pursuit, scythe melee, scythe energy
@@ -58,6 +94,7 @@ export abstract class BossBase extends Phaser.Physics.Arcade.Sprite {
   private acting = false
   private inUltimate = false
   private retreating = false
+  private approachUntil = 0
 
   constructor(scene: Phaser.Scene, x: number, y: number, arena: BossArena,
       tintColor: number, specials: SpecialAttack[]) {
@@ -86,8 +123,7 @@ export abstract class BossBase extends Phaser.Physics.Arcade.Sprite {
 
   /** Alternating turns: Sirius on even wall-clock slots, Orion on odd. */
   private get isMyTurn(): boolean {
-    const slot = Math.floor(Date.now() / TURN_MS) % 2
-    return this.starColor === (slot === 0 ? 'jade' : 'crimson')
+    return this.starColor === (turnParityAt(Date.now()) === 0 ? 'jade' : 'crimson')
   }
 
   preUpdate(time: number, delta: number): void {
@@ -106,8 +142,8 @@ export abstract class BossBase extends Phaser.Physics.Arcade.Sprite {
       }
       const away = Math.sign(this.x - player.x) || 1
       this.setVelocity(
-        distance < 420 ? away * 90 : 0,
-        Phaser.Math.Clamp((RETREAT_Y - this.y) * 2, -140, 140),
+        distance < 420 ? away * RETREAT_SPEED_X : 0,
+        Phaser.Math.Clamp((RETREAT_Y - this.y) * 3, -RETREAT_SPEED_Y, RETREAT_SPEED_Y),
       )
       return
     }
@@ -115,12 +151,18 @@ export abstract class BossBase extends Phaser.Physics.Arcade.Sprite {
       this.retreating = false
       ;(this.body as Phaser.Physics.Arcade.Body).setAllowGravity(true)
       this.nextActionAt = time + 700 // a beat to swoop back in
+      this.approachUntil = time + APPROACH_MS
     }
 
     if (time < this.nextActionAt) {
-      // Drift toward the player between actions.
       const dir = Math.sign(player.x - this.x)
-      this.setVelocityX(distance > 70 ? dir * MOVE_SPEED : 0)
+      if (time < this.approachUntil && distance > APPROACH_STANDOFF) {
+        // Turn start: dash into Eevee's vicinity, stopping at a standoff.
+        this.setVelocityX(dir * APPROACH_SPEED)
+      } else {
+        // Drift toward the player between actions.
+        this.setVelocityX(distance > 70 ? dir * MOVE_SPEED : 0)
+      }
       return
     }
 
@@ -195,6 +237,8 @@ export abstract class BossBase extends Phaser.Physics.Arcade.Sprite {
       duration: 180,
       onComplete: () => slash.destroy(),
     })
+    debugHitShape(this.scene, (g) =>
+      g.strokeRect(this.x - (MELEE_RANGE + 20), this.y - 70, (MELEE_RANGE + 20) * 2, 140))
     if (Math.abs(player.x - this.x) <= MELEE_RANGE + 20 && Math.abs(player.y - this.y) < 70) {
       this.arena.hitPlayer(MELEE_DAMAGE, { x: this.x, y: this.y })
     }

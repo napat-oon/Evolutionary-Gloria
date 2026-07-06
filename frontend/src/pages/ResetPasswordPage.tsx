@@ -33,7 +33,7 @@ export default function ResetPasswordPage() {
 
   return (
     <main className="page">
-      <PageBackdrop src="/images/eevee-evolutions-wallpaper.png" shiftY={-530} />
+      <PageBackdrop src="/images/eevee-evolutions-wallpaper.png" shiftY={-530} brightness={0.85} />
       <h1 className="game-title">Evolutionary Gloria</h1>
       <form className="auth-card glass" onSubmit={onSubmit}>
         <h2>Reset password</h2>

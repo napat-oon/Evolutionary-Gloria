@@ -74,12 +74,15 @@ export interface BossHpMessage {
   maxHp: number
 }
 
-/** A special attack added (or failed to add) a constellation star. */
+/**
+ * The full constellation after a star landed. Carrying the whole list (not
+ * a delta) keeps both tabs in lockstep even when adds race each other or a
+ * tab missed an earlier message: last writer wins, both sides identical.
+ */
 export interface StarMessage {
   type: 'star'
   tab: TabId
-  color: StarColor
-  eventId: string
+  stars: StarColor[]
 }
 
 /** Fight lifecycle mirrored across tabs. */
@@ -117,12 +120,18 @@ export interface WelcomeMessage {
   state: SessionState
 }
 
-/** The session is over for everyone (a tab left for the lobby). */
+/** The session is over for everyone: a tab left for the lobby or closed. */
 export interface EndedMessage {
   type: 'ended'
   tab: TabId
   instanceId: string
-  reason: 'left'
+  reason: 'left' | 'closed'
+}
+
+/** Heartbeat — each tab pings so the others know it is still alive. */
+export interface PingMessage {
+  type: 'ping'
+  tab: TabId
 }
 
 export type SyncMessage =
@@ -138,10 +147,11 @@ export type SyncMessage =
   | HelloMessage
   | WelcomeMessage
   | EndedMessage
+  | PingMessage
 
 const MESSAGE_TYPES = new Set([
   'pose', 'cast', 'melee', 'windup', 'damage', 'control', 'boss-hp', 'star', 'fight',
-  'hello', 'welcome', 'ended',
+  'hello', 'welcome', 'ended', 'ping',
 ])
 
 export function isSyncMessage(value: unknown): value is SyncMessage {

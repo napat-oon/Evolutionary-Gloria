@@ -19,6 +19,7 @@ export interface VitalsEvents {
  */
 export class Vitals {
   static readonly HEAL_PER_SECOND = 4
+  static readonly MANA_PER_SECOND = 2
   static readonly BUBBLE_POP_SECONDS = 3
   static readonly POTION_HEAL = 40
   static readonly POTION_COOLDOWN_SECONDS = 10
@@ -57,6 +58,10 @@ export class Vitals {
       this.bubblePoppedFor -= deltaSeconds
     } else if (this.hp < this.maxHp) {
       this.hp = Math.min(this.maxHp, this.hp + Vitals.HEAL_PER_SECOND * deltaSeconds)
+      this.emit()
+    }
+    if (this.mana < this.maxMana) {
+      this.mana = Math.min(this.maxMana, this.mana + Vitals.MANA_PER_SECOND * deltaSeconds)
       this.emit()
     }
     if (this.potionCooldown > 0) {

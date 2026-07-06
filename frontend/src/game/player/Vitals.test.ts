@@ -62,6 +62,15 @@ describe('Vitals', () => {
     expect(vitals.mana).toBe(10 + Vitals.ATTACK_MANA_RESTORE)
   })
 
+  it('mana regenerates over time up to the cap', () => {
+    const vitals = new Vitals(100, 30, 0)
+    vitals.spendMana(20)
+    vitals.update(3)
+    expect(vitals.mana).toBeCloseTo(10 + 3 * Vitals.MANA_PER_SECOND)
+    vitals.update(1000)
+    expect(vitals.mana).toBe(30)
+  })
+
   it('reports death exactly once through the callback', () => {
     let deaths = 0
     const vitals = new Vitals(10, 0, 0, { onDeath: () => deaths++ })
