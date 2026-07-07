@@ -7,12 +7,19 @@ import type { ConstellationTracker } from './ConstellationTracker'
 import { ORION_TINT } from './Orion'
 import { SIRIUS_TINT } from './Sirius'
 
-const EXPLOSION_DAMAGE = 60
+const EXPLOSION_DAMAGE = 40
 const DIVE_DAMAGE = 14
 /** Windup before the map-wide finale blast — long enough to reach a wall. */
 const FINALE_DELAY_MS = 2000
-/** Wait between dives; also used to stay in step when the OTHER twin dives. */
-const DIVE_CYCLE_MS = 940
+/** The dive halts this far from Eevee (radially) before detonating. */
+const DIVE_STANDOFF = 100
+/** How long the twin holds dead-still at the standoff before the blast. */
+const DIVE_PAUSE_MS = 100
+/** Dive blast radius, measured from the twin's center (the block source). */
+const DIVE_RADIUS = 300
+/** Wait between dives; also used to stay in step when the OTHER twin dives.
+ *  Must match one full dive: dash 360 + pause 100 + rise 320 + settle 260. */
+const DIVE_CYCLE_MS = 1040
 
 /** Everything the sequence needs to know about the room's geometry. */
 export interface UltimateLayout {
@@ -22,6 +29,8 @@ export interface UltimateLayout {
   centerX: number
   leftWallX: number
   rightWallX: number
+  /** Top edge of the cover walls — cover only counts below this height. */
+  wallTopY: number
 }
 
 /**
@@ -30,7 +39,8 @@ export interface UltimateLayout {
  * once per stored star (newest first) — each dive is performed by the twin
  * whose color matches the consumed star, in its own dimension. Dives cannot
  * be dodged, only blocked. The finale explosion can be neither dodged nor
- * blocked; only standing behind one of the cover walls survives it.
+ * blocked; only crouching behind a cover wall — outside it in X and below
+ * its top edge — survives it.
  */
 export class UltimateSequence {
   private readonly scene: Phaser.Scene
@@ -41,6 +51,9 @@ export class UltimateSequence {
   private readonly onDone: () => void
   private smoke?: Phaser.GameObjects.Image
   private hover?: Phaser.Time.TimerEvent
+  /** True from dash until risen back — the hover lerp must let go, or the
+   *  twin drifts toward its float anchor while holding at the standoff. */
+  private diving = false
 
   constructor(scene: Phaser.Scene, boss: BossBase, arena: BossArena,
       tracker: ConstellationTracker, layout: UltimateLayout, onDone: () => void) {
@@ -98,6 +111,10 @@ export class UltimateSequence {
       delay: 40,
       loop: true,
       callback: () => {
+        if (this.diving) {
+          this.smoke?.setPosition(boss.x, boss.y)
+          return
+        }
         const target = this.floatTarget()
         boss.x = Phaser.Math.Linear(boss.x, target.x, 0.12)
         boss.y = Phaser.Math.Linear(boss.y, target.y, 0.12)
@@ -122,31 +139,49 @@ export class UltimateSequence {
       return
     }
     const { scene, boss } = this
-    const targetX = this.arena.player.x
-    const targetY = this.arena.player.y
+    const player = this.arena.player
+    // The dash pulls up short of Eevee: the twin stops dead on the standoff
+    // circle around them (whatever the approach angle), holds, then the
+    // blast erupts from the twin's own center — so the shield arc has a
+    // clear direction to catch it from.
+    const dx = player.x - boss.x
+    const dy = player.y - boss.y
+    const approach = Math.hypot(dx, dy) || 1
+    const targetX = player.x - (dx / approach) * DIVE_STANDOFF
+    const targetY = player.y - (dy / approach) * DIVE_STANDOFF
     const flash = scene.add.image(boss.x, boss.y, TEX.spark)
       .setTint(star === 'jade' ? SIRIUS_TINT : ORION_TINT).setScale(3)
     scene.tweens.add({ targets: flash, alpha: 0, duration: 250, onComplete: () => flash.destroy() })
 
+    this.diving = true
     scene.tweens.add({
       targets: boss,
-      x: targetX + Phaser.Math.Between(-40, 40),
+      x: targetX,
       y: targetY,
       duration: 360,
       ease: 'Cubic.easeIn',
       onComplete: () => {
-        debugHitShape(scene, (g) => g.strokeCircle(boss.x, boss.y, 75))
-        if (Phaser.Math.Distance.Between(
-            this.arena.player.x, this.arena.player.y, boss.x, boss.y) < 75) {
-          // Undodgable — only the shield arc (or a wall) helps.
-          this.arena.hitPlayer(DIVE_DAMAGE, { x: boss.x, y: boss.y }, { undodgeable: true })
-        }
-        scene.tweens.add({
-          targets: boss,
-          y: this.floatTarget().y,
-          duration: 320,
-          ease: 'Sine.easeOut',
-          onComplete: () => scene.time.delayedCall(260, () => this.diveNext()),
+        scene.time.delayedCall(DIVE_PAUSE_MS, () => {
+          const blast = scene.add.image(boss.x, boss.y, TEX.aoe)
+            .setTint(boss.tintColor)
+            .setScale((DIVE_RADIUS * 2) / 96, (DIVE_RADIUS * 2) / 64)
+          scene.tweens.add({ targets: blast, alpha: 0, duration: 300, onComplete: () => blast.destroy() })
+          debugHitShape(scene, (g) => g.strokeCircle(boss.x, boss.y, DIVE_RADIUS))
+          if (Phaser.Math.Distance.Between(
+              player.x, player.y, boss.x, boss.y) < DIVE_RADIUS) {
+            // Undodgable — only the shield arc (or a wall) helps.
+            this.arena.hitPlayer(DIVE_DAMAGE, { x: boss.x, y: boss.y }, { undodgeable: true })
+          }
+          scene.tweens.add({
+            targets: boss,
+            y: this.floatTarget().y,
+            duration: 320,
+            ease: 'Sine.easeOut',
+            onComplete: () => {
+              this.diving = false // back on the float — drift resumes
+              scene.time.delayedCall(260, () => this.diveNext())
+            },
+          })
         })
       },
     })
@@ -185,13 +220,21 @@ export class UltimateSequence {
           scene.tweens.add({ targets: blast, alpha: 0, duration: 600, onComplete: () => blast.destroy() })
           scene.cameras.main.shake(400, 0.02)
           const player = this.arena.player
-          // Only the outer sides of the two cover walls are safe.
-          debugHitShape(scene, (g) => g.strokeRect(
-            layout.leftWallX - 18, 0,
-            layout.rightWallX + 18 - (layout.leftWallX - 18), layout.worldHeight,
-          ), 900, 0xff3030)
-          const shielded =
+          // Cover only counts when actually ducked behind a wall: outside
+          // the walls in X AND below their top edge — the blast sails over
+          // anyone hovering above wall height.
+          debugHitShape(scene, (g) => {
+            g.strokeRect(
+              layout.leftWallX - 18, 0,
+              layout.rightWallX + 18 - (layout.leftWallX - 18), layout.worldHeight)
+            g.strokeRect(0, 0, layout.leftWallX - 18, layout.wallTopY)
+            g.strokeRect(
+              layout.rightWallX + 18, 0,
+              layout.worldWidth - (layout.rightWallX + 18), layout.wallTopY)
+          }, 900, 0xff3030)
+          const behindWall =
             player.x < layout.leftWallX - 18 || player.x > layout.rightWallX + 18
+          const shielded = behindWall && player.y > layout.wallTopY
           if (!shielded) {
             this.arena.hitPlayer(EXPLOSION_DAMAGE, undefined,
               { undodgeable: true, unblockable: true })

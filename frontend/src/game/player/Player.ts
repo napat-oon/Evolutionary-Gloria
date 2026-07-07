@@ -13,10 +13,10 @@ const DASH_COOLDOWN_MS = 800
 const COMBO_WINDOW_MS = 420
 const COMBO_DAMAGE = [5, 5, 10]
 /** Total melee reach measured FROM Eevee's center along the aim. */
-const MELEE_REACH = 42
-const MELEE_THICKNESS = 30
+const MELEE_REACH = 32
+const MELEE_THICKNESS = 20
 const BLOCK_RADIUS = 46
-const BLOCK_HALF_ANGLE = Phaser.Math.DegToRad(40)
+const BLOCK_HALF_ANGLE = Phaser.Math.DegToRad(30)
 
 export interface PlayerKeys {
   left: Phaser.Input.Keyboard.Key
@@ -343,11 +343,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     slash.setRotation(aim.angle())
     const body = slash.body as Phaser.Physics.Arcade.Body
     body.setAllowGravity(false)
-    if (Math.abs(aim.x) >= Math.abs(aim.y)) {
-      body.setSize(MELEE_REACH, MELEE_THICKNESS)
-    } else {
-      body.setSize(MELEE_THICKNESS, MELEE_REACH)
-    }
+    // The slash is one REACH×THICKNESS rectangle rotated to the aim angle
+    // (0° horizontal, 90° vertical, ±45° diagonal…). Arcade bodies can't
+    // rotate, so the body is that rotated rectangle's bounding box.
+    body.setSize(
+      Math.abs(aim.x) * MELEE_REACH + Math.abs(aim.y) * MELEE_THICKNESS,
+      Math.abs(aim.y) * MELEE_REACH + Math.abs(aim.x) * MELEE_THICKNESS,
+    )
     this.scene.time.delayedCall(110, () => slash.destroy())
   }
 

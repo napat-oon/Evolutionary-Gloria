@@ -77,6 +77,10 @@ export default function GamePage() {
   const alertTimer = useRef<number | null>(null)
   const matchIdRef = useRef<number | null>(null)
   const [result, setResult] = useState<MatchResultView | null>(null)
+  // Victory results wait for the in-game send-off; defeats pop immediately.
+  const pendingResult = useRef<MatchResultView | null>(null)
+  const [victoryStats, setVictoryStats] =
+    useState<{ pointsEarned: number; durationMs: number } | null>(null)
   const [loggedOut, setLoggedOut] = useState(false)
   // The session ends for everyone the moment any tab leaves or closes.
   const [endedReason, setEndedReason] = useState<'left' | 'closed' | null>(null)
@@ -137,14 +141,28 @@ export default function GamePage() {
     [],
   )
 
+  /** Defeats show at once; victories wait for the endscreen to release them. */
+  const presentResult = useCallback((view: MatchResultView) => {
+    if (view.victory) {
+      pendingResult.current = view
+      setVictoryStats({ pointsEarned: view.pointsEarned, durationMs: view.durationMs })
+    } else {
+      setResult(view)
+    }
+  }, [])
+
+  const onEndscreenDone = useCallback(() => {
+    setResult(pendingResult.current ?? { victory: true, pointsEarned: 0, durationMs: 0 })
+  }, [])
+
   // Mirror tabs don't own the server match, but they still show the outcome.
   const onFightEnded = useCallback(
     (victory: boolean) => {
       if (tab !== 1) {
-        setResult({ victory, pointsEarned: 0, durationMs: 0 })
+        presentResult({ victory, pointsEarned: 0, durationMs: 0 })
       }
     },
-    [tab],
+    [tab, presentResult],
   )
   const onPotionsUsed = useCallback((remaining: number) => setPotions(remaining), [])
   const onWindup = useCallback((color: string) => {
@@ -170,7 +188,7 @@ export default function GamePage() {
       const matchId = matchIdRef.current
       matchIdRef.current = null
       if (matchId === null) {
-        setResult({ victory, pointsEarned: 0, durationMs: 0 })
+        presentResult({ victory, pointsEarned: 0, durationMs: 0 })
         return
       }
       api
@@ -179,16 +197,16 @@ export default function GamePage() {
           { matchId, victory },
         )
         .then((response) => {
-          setResult({
+          presentResult({
             victory: response.victory,
             pointsEarned: response.pointsEarned,
             durationMs: response.durationMs,
           })
           return refreshUser()
         })
-        .catch(() => setResult({ victory, pointsEarned: 0, durationMs: 0 }))
+        .catch(() => presentResult({ victory, pointsEarned: 0, durationMs: 0 }))
     },
-    [refreshUser],
+    [refreshUser, presentResult],
   )
 
   function openOtherTab() {
@@ -225,12 +243,14 @@ export default function GamePage() {
           potions={potions}
           tabSync={tabSync}
           paused={loggedOut || endedReason !== null || (!peerPresent && !result)}
+          victoryStats={victoryStats}
           onShopOpen={onShopOpen}
           onPotionsUsed={onPotionsUsed}
           onWindup={onWindup}
           onMatchStart={onMatchStart}
           onMatchFinished={onMatchFinished}
           onFightEnded={onFightEnded}
+          onEndscreenDone={onEndscreenDone}
           onSessionEnded={onSessionEnded}
         />
       )}

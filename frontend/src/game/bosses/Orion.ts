@@ -97,7 +97,9 @@ class ExplosiveShell implements SpecialAttack {
         scene.tweens.add({ targets: blast, alpha: 0, duration: 350, onComplete: () => blast.destroy() })
         debugHitShape(scene, (g) => g.strokeCircle(boss.x, boss.y, 150))
         if (Phaser.Math.Distance.Between(arena.player.x, arena.player.y, boss.x, boss.y) < 150) {
-          arena.hitPlayer(22, { x: boss.x, y: boss.y })
+          // The shell burst washes around the shield; only distance (or
+          // dash i-frames) escapes it.
+          arena.hitPlayer(22, { x: boss.x, y: boss.y }, { unblockable: true })
         }
       })
     }
@@ -136,8 +138,8 @@ class BlackHole implements SpecialAttack {
         if (distance < 240 && player.isControlled) {
           const toHole = new Phaser.Math.Vector2(hole.x - player.x, hole.y - player.y).normalize()
           const body = player.body as Phaser.Physics.Arcade.Body
-          body.velocity.x += toHole.x * 34
-          body.velocity.y += toHole.y * 22
+          body.velocity.x += toHole.x * 128
+          body.velocity.y += toHole.y * 84
         }
         if (distance < 46 && scene.time.now - lastTick > 500) {
           lastTick = scene.time.now

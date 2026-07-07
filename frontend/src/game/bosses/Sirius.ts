@@ -13,7 +13,7 @@ class BoomerangScythe implements SpecialAttack {
   execute(boss: BossBase, arena: BossArena): void {
     const scene = boss.scene
     const scythe = scene.physics.add.image(boss.x, boss.y - 10, TEX.scythe)
-    scythe.setTint(SIRIUS_TINT).setScale(1.4)
+    scythe.setTint(SIRIUS_TINT).setScale(2.0)
     ;(scythe.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
     const target = new Phaser.Math.Vector2(arena.player.x, arena.player.y)
     let hitDone = false

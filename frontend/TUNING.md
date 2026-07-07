@@ -30,8 +30,10 @@ refreshes in place (you'll be back at the intermission).
   boss scythe melee box, Orion's dash-swipe oval (line = flat back edge),
   shell explosion radius, black-hole pull + grind circles, ultimate dive
   radius.
-- **Red** box during the ultimate finale = the lethal zone (everything
-  between the outer faces of the two cover walls).
+- **Red** boxes during the ultimate finale = the lethal zone: everything
+  between the outer faces of the two cover walls, plus everything above
+  the walls' top edge on the outer sides (cover only counts crouched
+  behind a wall, below its top).
 - The implementation lives in `src/game/core/hitboxDebug.ts`; delete the
   `setupHitboxDebug`/`debugHitShape` calls when the temporary visuals are no
   longer wanted.
@@ -42,9 +44,13 @@ refreshes in place (you'll be back at the intermission).
 |---|---|
 | Run / jump / dash speeds & cooldown | `RUN_SPEED`, `JUMP_SPEED`, `DASH_SPEED`, `DASH_MS`, `DASH_COOLDOWN_MS` |
 | Melee combo damage | `COMBO_DAMAGE` (= `[5, 5, 10]`) |
-| Melee reach (from Eevee's center) & thickness | `MELEE_REACH` (42), `MELEE_THICKNESS` (30) |
+| Melee reach (from Eevee's center) & thickness | `MELEE_REACH` (32), `MELEE_THICKNESS` (20) |
 | Combo window | `COMBO_WINDOW_MS` |
-| Block arc radius / half-angle | `BLOCK_RADIUS`, `BLOCK_HALF_ANGLE` (40°) |
+| Block arc radius / half-angle | `BLOCK_RADIUS`, `BLOCK_HALF_ANGLE` (30°) |
+
+The slash is a single REACH×THICKNESS rectangle rotated to the mouse aim
+(0° horizontal … 90° vertical); arcade bodies can't rotate, so the physics
+body is that rotated rectangle's bounding box (see `Player.spawnSlash`).
 
 ## Vitals — `src/game/player/Vitals.ts` (static fields)
 
@@ -57,12 +63,12 @@ refreshes in place (you'll be back at the intermission).
 |---|---|
 | StarShotgun | mana 20, 5 stars × 8 dmg, speed 520, spread 0.14 rad |
 | WaterRush | mana 20, speed 560, 320 ms, shrink scale 0.2 |
-| ElectricDive | mana 25, rise 240 ms + hover 510 ms (= 0.75 s delay), strike 18 dmg |
-| FirePlunge | mana 25, fall speed 820 (in `Player.beginFirePlunge`), `PATH_DAMAGE` 20 |
-| DarkSwing | mana 30, `DAMAGE = [24, 48, 96]`, `SCALE_X = [1.9, 2.6, 3.8]` — escalates on hit, state-3 hit wraps to 1, misses keep state |
-| LeafBlade | mana 25, 22 dmg, dash speed 620, delay 650 ms |
-| TwinRibbons | mana 25, 14 dmg each |
-| IcicleStomp | mana 30, 5 × 16 dmg |
+| ElectricDive | mana 25, rise 240 ms + hover 510 ms (= 0.75 s delay), strike 36 dmg |
+| FirePlunge | mana 25, fall speed 820 (in `Player.beginFirePlunge`), `PATH_DAMAGE` 45 |
+| DarkSwing | mana 30, `DAMAGE = [48, 56, 96]`, `SCALE_X = [1.9, 2.6, 3.8]` — escalates on hit, state-3 hit wraps to 1, misses keep state |
+| LeafBlade | mana 25, 50 dmg, dash speed 620, delay 650 ms |
+| TwinRibbons | mana 25, 33 dmg each |
+| IcicleStomp | mana 25, 5 × 35 dmg |
 
 ## Twins — `src/game/bosses/`
 
@@ -75,12 +81,37 @@ refreshes in place (you'll be back at the intermission).
 - `Sirius.ts`: BoomerangScythe (16 dmg, 9 s cd), StarVolley (7 × 8 dmg,
   14 s cd), WardingCircle (×0.5 boss damage taken, 6.5 s, 18 s cd).
 - `Orion.ts`: DashSwipe (20 dmg, `REACH_X` 230 / `REACH_Y` 90, 8 s cd),
-  ExplosiveShell (22 dmg within 150 px), BlackHole (6 dmg per 500 ms grind,
-  unblockable but dodgeable; pull 240 px, grind 46 px, 15 s cd).
-- `UltimateSequence.ts`: `DIVE_DAMAGE` 14, `EXPLOSION_DAMAGE` 60,
-  `FINALE_DELAY_MS` 2000, dive hit radius 75, finale safe margin ±18 px
-  outside the walls.
-- Boss HP pool: `BOSS_MAX_HP` in `src/game/scenes/BossRoomScene.ts`.
+  ExplosiveShell (22 dmg within 150 px, unblockable but dodgeable),
+  BlackHole (6 dmg per 500 ms grind, unblockable but dodgeable; pull
+  240 px, grind 46 px, 15 s cd).
+- `UltimateSequence.ts`: `DIVE_DAMAGE` 14, `EXPLOSION_DAMAGE` 40,
+  `FINALE_DELAY_MS` 2000. Dives dash onto the `DIVE_STANDOFF` circle
+  (100 px radially — any approach angle) around Eevee, freeze dead for
+  `DIVE_PAUSE_MS` (100 ms — the hover drift is suspended while diving),
+  then blast `DIVE_RADIUS` (300 px) from the twin's center.
+  `DIVE_CYCLE_MS` (1040) must equal one full dive (dash 360 + pause 100 +
+  rise 320 + settle 260) or the twins' turn-taking drifts between tabs.
+  Finale safety = outside the walls ±18 px in X **and** below `wallTopY`.
+- Boss HP pool: `BOSS_MAX_HP` (5000) in `src/game/scenes/BossRoomScene.ts`.
+
+## Cinematics — `src/game/scenes/BossCinematics.ts` + `BossRoomScene.ts`
+
+- Clips: `INTRO_VIDEOS` (one per dimension — Sirius and Orion can get
+  different intro footage) and `ENDSCREEN_VIDEO`, all currently
+  `/placeholder-video.mp4`. Swap the URLs there; nothing else references
+  the files. Loaded muted so autoplay always works. Intro plays its clip
+  once, the victory endscreen once.
+- Timing is driven by the scene clock (clip duration + `CLOCK_SLACK_MS`),
+  NOT by the video element: browsers defer muted playback in hidden tabs,
+  but the worker heartbeat keeps stepping a hidden game, so both
+  dimensions run their intros simultaneously and both bosses spawn even
+  if a tab is never focused.
+- `BossRoomScene.ts`: `SPAWN_Y` (twin materialises at center, ~1 platform
+  up), `ENDSCREEN_HOLD_MS` 5000 (last victory line → overlay),
+  `VICTORY_STATS_TIMEOUT_MS` 8000 (server-stats wait cap).
+- `BossCinematics.ts`: `FLASH_MS` 400, `LINE_FADE_MS` 1000 (per victory
+  line), `VIDEO_FAILSAFE_MS` 20000 (a broken video falls through instead
+  of stalling the fight).
 
 ## Rooms — `src/game/scenes/`
 

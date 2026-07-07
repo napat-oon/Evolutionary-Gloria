@@ -105,7 +105,7 @@ class ElectricDive implements AttackPattern {
           })
         }
         spawnProjectile(ctx, TEX.spark, player.x, player.y,
-          new Phaser.Math.Vector2(dir * 520, 640), 500, 18)
+          new Phaser.Math.Vector2(dir * 520, 640), 500, 36)
       })
     })
   }
@@ -115,7 +115,7 @@ class ElectricDive implements AttackPattern {
 class FirePlunge implements AttackPattern {
   readonly id = 'fire-plunge' as const
   readonly manaCost = 25
-  private static readonly PATH_DAMAGE = 20
+  private static readonly PATH_DAMAGE = 45
 
   cast(ctx: CastContext): void {
     const player = ctx.player
@@ -165,7 +165,7 @@ class DarkSwing implements AttackPattern {
   readonly manaCost = 30
   /** Per-state horizontal scale (96px aoe texture) and damage. */
   private static readonly SCALE_X = [1.9, 2.6, 3.8]
-  private static readonly DAMAGE = [24, 48, 96]
+  private static readonly DAMAGE = [48, 56, 96]
 
   private state = 0
 
@@ -211,7 +211,7 @@ class LeafBlade implements AttackPattern {
       const velocity = new Phaser.Math.Vector2(target.x - spawnX, target.y - spawnY)
       if (velocity.lengthSq() === 0) velocity.set(ctx.player.facing, 0)
       velocity.normalize().scale(620)
-      spawnProjectile(ctx, TEX.leaf, spawnX, spawnY, velocity, 600, 22)
+      spawnProjectile(ctx, TEX.leaf, spawnX, spawnY, velocity, 600, 50)
     })
   }
 }
@@ -226,7 +226,7 @@ class TwinRibbons implements AttackPattern {
     for (const offset of [-12, 12]) {
       const ribbon = ctx.projectiles.create(
         ctx.player.x + offset, ctx.player.y - 30, TEX.ribbon) as Phaser.Physics.Arcade.Image
-      ribbon.setData('damage', 14)
+      ribbon.setData('damage', 33)
       ;(ribbon.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
       ribbon.setVelocity(offset * 2, -680)
       ctx.scene.tweens.add({ targets: ribbon, scaleY: 2.2, duration: 250 })
@@ -238,7 +238,7 @@ class TwinRibbons implements AttackPattern {
 /** Ctrl + Right click + S: stomp and rain icicle spears down through the floors. */
 class IcicleStomp implements AttackPattern {
   readonly id = 'icicle-stomp' as const
-  readonly manaCost = 30
+  readonly manaCost = 25
 
   cast(ctx: CastContext): void {
     const player = ctx.player
@@ -251,7 +251,7 @@ class IcicleStomp implements AttackPattern {
         const x = player.x - 90 + i * 45
         ctx.scene.time.delayedCall(i * 60, () => {
           const icicle = ctx.projectiles.create(x, startY, TEX.icicle) as Phaser.Physics.Arcade.Image
-          icicle.setData('damage', 16)
+          icicle.setData('damage', 35)
           if (ctx.remote) icicle.setData('remote', true)
           icicle.setFlipY(true) // point downward
           ;(icicle.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)

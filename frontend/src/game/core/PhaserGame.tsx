@@ -11,6 +11,8 @@ interface PhaserGameProps {
   potions: number
   tabSync: TabSync
   paused?: boolean
+  /** Server-confirmed match stats, pushed into the victory endscreen. */
+  victoryStats?: { pointsEarned: number; durationMs: number } | null
   onShopOpen: () => void
   onPotionsUsed?: (remaining: number) => void
   onWindup?: (color: string) => void
@@ -18,23 +20,30 @@ interface PhaserGameProps {
   onMatchFinished?: (victory: boolean) => void
   /** Fires on every tab when the fight ends (match:finished is tab 1 only). */
   onFightEnded?: (victory: boolean) => void
+  /** The in-game victory send-off finished; the overlay may pop now. */
+  onEndscreenDone?: () => void
   onSessionEnded?: (reason: string) => void
 }
 
-/** How often the worker heartbeat steps a hidden game, in ms (~20 fps). */
+/** Fixed chunk a hidden game is stepped by, in ms (~20 fps). */
 const BACKGROUND_STEP_MS = 50
+/** Most elapsed time settled per tick — bounds the catch-up burst after a
+ *  stall while keeping the hidden clock glued to real time. */
+const MAX_CATCHUP_MS = 1000
 
 /** Mounts the Phaser game and bridges its events into React. */
 export default function PhaserGame({
   potions,
   tabSync,
   paused = false,
+  victoryStats = null,
   onShopOpen,
   onPotionsUsed,
   onWindup,
   onMatchStart,
   onMatchFinished,
   onFightEnded,
+  onEndscreenDone,
   onSessionEnded,
 }: PhaserGameProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -68,6 +77,7 @@ export default function PhaserGame({
     if (onMatchStart) game.events.on('match:start', onMatchStart)
     if (onMatchFinished) game.events.on('match:finished', onMatchFinished)
     if (onFightEnded) game.events.on('fight:ended', onFightEnded)
+    if (onEndscreenDone) game.events.on('endscreen:done', onEndscreenDone)
     if (onSessionEnded) game.events.on('session:ended', onSessionEnded)
     gameRef.current = game
 
@@ -84,18 +94,47 @@ export default function PhaserGame({
     // hidden, so we step the game manually from its heartbeat. The same
     // unthrottled clock also drives presence pings while hidden (window
     // intervals slow to a crawl in background tabs).
+    //
+    // Ticks from a background renderer arrive late or coalesced (the OS
+    // deprioritises the process), and a fixed 50ms per tick loses the
+    // difference — the hidden dimension's clock drifted seconds behind the
+    // focused one. So each tick settles the real elapsed time instead,
+    // stepping it in fixed chunks (debt-capped, so a long stall fast-forwards
+    // briefly rather than spiralling).
     const ticker = new Worker('/tick-worker.js')
+    let lastTickAt = performance.now()
+    let owedMs = 0
     ticker.onmessage = () => {
       tabSync.heartbeat()
+      const now = performance.now()
+      const elapsed = now - lastTickAt
+      lastTickAt = now
       if (document.hidden && !pausedRef.current && gameRef.current) {
-        gameRef.current.step(performance.now(), BACKGROUND_STEP_MS)
+        owedMs = Math.min(owedMs + elapsed, MAX_CATCHUP_MS)
+        while (owedMs >= BACKGROUND_STEP_MS && gameRef.current) {
+          gameRef.current.step(performance.now(), BACKGROUND_STEP_MS)
+          owedMs -= BACKGROUND_STEP_MS
+        }
+      } else {
+        owedMs = 0 // visible: rAF owns the clock again
       }
     }
 
     return () => {
       ticker.terminate()
       window.removeEventListener('focus', claim)
+      // destroy() only queues the teardown for the next frame step. A paused
+      // game's loop is asleep (no steps ever run), so the queued destroy
+      // would never happen — leaving keyboard capture alive on the next
+      // page. runDestroy() performs the same teardown synchronously (it is
+      // absent from the type definitions but public on the Game instance).
+      // A game still booting must not be torn down synchronously (its scene
+      // systems don't exist yet); its boot sequence runs the pending destroy.
+      // isRunning only turns true after the SceneManager has booted.
       game.destroy(true)
+      if (game.isRunning && !game.loop.running) {
+        ;(game as unknown as { runDestroy(): void }).runDestroy()
+      }
       gameRef.current = null
     }
     // The game is created once; live updates flow through setPotions below.
@@ -112,6 +151,15 @@ export default function PhaserGame({
       game.loop.wake()
     }
   }, [paused])
+
+  // The victory endscreen reads the stats from the registry (or catches the
+  // event if it is already waiting on them).
+  useEffect(() => {
+    const game = gameRef.current
+    if (!game || !victoryStats) return
+    game.registry.set('victory-stats', victoryStats)
+    game.events.emit('victory:stats', victoryStats)
+  }, [victoryStats])
 
   useEffect(() => {
     const game = gameRef.current

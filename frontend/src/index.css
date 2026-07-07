@@ -58,6 +58,11 @@ body {
   background-clip: text;
   color: transparent;
   text-align: center;
+  filter: drop-shadow(0px 0px 7px black);
+  text-shadow: 0 0 99px #000000, 0 0 99px #000000;
+  font-variant: petite-caps;
+  -webkit-text-stroke-color: #ffe5d4bf;
+  -webkit-text-stroke-width: 0.75px;
 }
 
 /* Full-viewport artwork behind a page; pages shift the visible band. */

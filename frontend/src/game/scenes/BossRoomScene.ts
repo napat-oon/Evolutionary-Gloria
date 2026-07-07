@@ -12,6 +12,8 @@ import { Player } from '../player/Player'
 import { SceneSync } from '../sync/SceneSync'
 import type { SessionState } from '../sync/messages'
 import type { TabSync } from '../sync/TabSync'
+import { formatDuration } from '../../lib/format'
+import { BossCinematics, ENDSCREEN_VIDEO, INTRO_VIDEOS } from './BossCinematics'
 
 // The arena is twice the old room in both directions; the camera scrolls.
 const WIDTH = 1920
@@ -23,14 +25,25 @@ const LEFT_WALL_X = 460
 const RIGHT_WALL_X = 1460
 /** Vacuum gap under the walls — 1/5 of Eevee, water-morph slips through. */
 const WALL_GAP = 8
-const BOSS_MAX_HP = 600
+/** Cover-wall display height (128px texture × 1.5 scale). */
+const WALL_HEIGHT = 192
+/** Finale cover only counts below this line — the walls' top edge. */
+const WALL_TOP_Y = GROUND_Y - WALL_GAP - WALL_HEIGHT
+const BOSS_MAX_HP = 5000
 
 type FightPhase = 'intro' | 'fighting' | 'ultimate' | 'victory' | 'defeat'
+
+/** How long the victory lines linger before the React overlay pops. */
+const ENDSCREEN_HOLD_MS = 5000
+/** Give the server reply this long to bring the victory stats. */
+const VICTORY_STATS_TIMEOUT_MS = 8000
+/** The twin materialises about one platform above its rest height. */
+const SPAWN_Y = GROUND_Y - 90 - 52
 
 /** The twins' arena: one boss per dimension, shared HP pool, shared stars. */
 export class BossRoomScene extends Phaser.Scene {
   private player!: Player
-  private boss!: BossBase
+  private boss?: BossBase
   private tabSync?: TabSync
   private readonly tracker = new ConstellationTracker()
   private bossHp = BOSS_MAX_HP
@@ -40,9 +53,21 @@ export class BossRoomScene extends Phaser.Scene {
   private starDots: Phaser.GameObjects.Image[] = []
   private sparkles: Phaser.GameObjects.Image[] = []
   private ultimatePending = false
+  private solids!: Phaser.Physics.Arcade.StaticGroup
+  private projectiles!: Phaser.Physics.Arcade.Group
+  private cinematics!: BossCinematics
 
   constructor() {
     super('boss-room')
+  }
+
+  preload(): void {
+    // Cinematic backdrops; noAudio, so autoplay is never blocked. The loader
+    // skips keys already cached from an earlier run.
+    const sync = this.registry.get('tabsync') as TabSync | undefined
+    const intro = INTRO_VIDEOS[sync?.tab ?? 1]
+    this.load.video(intro.key, intro.url, true)
+    this.load.video(ENDSCREEN_VIDEO.key, ENDSCREEN_VIDEO.url, true)
   }
 
   create(): void {
@@ -65,12 +90,16 @@ export class BossRoomScene extends Phaser.Scene {
       this.tracker.restore(adoptedState.stars)
     }
 
+    this.registry.remove('victory-stats')
     this.physics.world.setBounds(0, 0, WIDTH, HEIGHT)
     this.cameras.main.setBounds(0, 0, WIDTH, HEIGHT)
     this.cameras.main.setBackgroundColor(this.tabSync?.tab === 2 ? '#160a12' : '#0a1612')
     setupHitboxDebug(this)
+    this.cinematics = new BossCinematics(this,
+      this.tabSync?.tab === 2 ? ORION_TINT : SIRIUS_TINT)
 
     const solids = this.physics.add.staticGroup()
+    this.solids = solids
     for (let x = 32; x < WIDTH; x += 64) {
       solids.create(x, GROUND_Y + 32, TEX.ground)
     }
@@ -79,7 +108,8 @@ export class BossRoomScene extends Phaser.Scene {
     // They hover a sliver above the ground: water-morphed Eevee fits under.
     const walls = this.physics.add.staticGroup()
     for (const wallX of [LEFT_WALL_X, RIGHT_WALL_X]) {
-      const wall = walls.create(wallX, GROUND_Y - WALL_GAP - 96, TEX.wall) as Phaser.Physics.Arcade.Image
+      const wall = walls.create(
+        wallX, WALL_TOP_Y + WALL_HEIGHT / 2, TEX.wall) as Phaser.Physics.Arcade.Image
       wall.setScale(1, 1.5).refreshBody()
     }
 
@@ -106,6 +136,7 @@ export class BossRoomScene extends Phaser.Scene {
     }
 
     const projectiles = this.physics.add.group()
+    this.projectiles = projectiles
     this.player = new Player(this, 160, GROUND_Y - 40, projectiles,
       (this.registry.get('potions') as number | undefined) ?? 0)
     this.physics.add.collider(this.player, solids)
@@ -129,18 +160,36 @@ export class BossRoomScene extends Phaser.Scene {
       })
     }
 
+    this.buildFightUi()
+    this.events.on('player:death', () => this.endFight(false, true))
+    this.events.on('constellation:changed', () => this.renderConstellation())
+    this.events.on('player:potion', (remaining: number) => {
+      this.game.events.emit('potions:used', remaining)
+    })
+
+    if (this.adopted && adoptedState) {
+      // A late joiner skips the cinematic; its twin is already mid-fight.
+      this.spawnBoss(WIDTH - 260, GROUND_Y - 52)
+      this.joinRunningFight(adoptedState)
+    } else {
+      this.runIntro()
+    }
+  }
+
+  /** Creates this dimension's twin and wires its physics — the twin only
+   *  exists from the moment the intro (or adoption) summons it. */
+  private spawnBoss(x: number, y: number): void {
     const arena = this.buildArena()
-    const isOrionDimension = this.tabSync?.tab === 2
-    this.boss = isOrionDimension
-      ? new Orion(this, WIDTH - 260, -60, arena)
-      : new Sirius(this, WIDTH - 260, -60, arena)
-    this.boss.setUltimate(true) // frozen until the intro finishes
-    this.physics.add.collider(this.boss, solids)
+    const boss = this.tabSync?.tab === 2
+      ? new Orion(this, x, y, arena)
+      : new Sirius(this, x, y, arena)
+    this.boss = boss
+    this.physics.add.collider(boss, this.solids)
 
     // Player attacks damage the shared pool. Replayed (remote) projectiles
     // are visuals only — the dimension that cast them already counted the
     // damage, so a copied star shotgun can never hit twice.
-    this.physics.add.overlap(projectiles, this.boss, (_boss, projectileObj) => {
+    this.physics.add.overlap(this.projectiles, boss, (_boss, projectileObj) => {
       const projectile = projectileObj as Phaser.Physics.Arcade.Image
       if (!projectile.active || this.phase === 'victory' || this.phase === 'defeat') return
       const damage = (projectile.getData('damage') as number | undefined) ?? 8
@@ -150,25 +199,12 @@ export class BossRoomScene extends Phaser.Scene {
         this.player.vitals.restoreManaFromHit()
       }
       projectile.destroy()
-      this.tweens.add({ targets: this.boss, alpha: { from: 0.5, to: 1 }, duration: 120 })
+      this.tweens.add({ targets: boss, alpha: { from: 0.5, to: 1 }, duration: 120 })
       if (remote) return
       onHit?.()
       this.damageBoss(damage * arena.bossDamageMultiplier)
       this.events.emit('boss:damaged')
     })
-
-    this.buildFightUi()
-    this.events.on('player:death', () => this.endFight(false, true))
-    this.events.on('constellation:changed', () => this.renderConstellation())
-    this.events.on('player:potion', (remaining: number) => {
-      this.game.events.emit('potions:used', remaining)
-    })
-
-    if (this.adopted && adoptedState) {
-      this.joinRunningFight(adoptedState)
-    } else {
-      this.runIntro()
-    }
   }
 
   private buildArena(): BossArena {
@@ -218,14 +254,16 @@ export class BossRoomScene extends Phaser.Scene {
     this.phase = 'fighting'
     this.player.setPosition(state.x, state.y)
     this.player.vitals.applySnapshot(state.vitals)
-    this.boss.setUltimate(false)
-    this.boss.setPosition(this.boss.x, GROUND_Y - 52)
     this.updateBossBar()
     this.renderConstellation()
   }
 
+  /**
+   * Intro cinematic: no twin yet — two videos play back-to-back in place of
+   * the background, the screen flashes in this dimension's color, and the
+   * twin materialises at the arena's center about one platform up.
+   */
   private runIntro(): void {
-    this.player.lockFor(2600)
     const title = this.add
       .text(VIEW_W / 2, 150, 'SIRIUS & ORION', {
         fontSize: '34px', color: '#e8e6f0', fontStyle: 'bold',
@@ -240,10 +278,9 @@ export class BossRoomScene extends Phaser.Scene {
       .setAlpha(0)
       .setScrollFactor(0)
       .setDepth(8)
-
     this.tweens.add({ targets: [title, subtitle], alpha: 1, duration: 500 })
-    this.tweens.add({ targets: this.boss, y: GROUND_Y - 52, duration: 900, ease: 'Bounce.easeOut', delay: 300 })
-    this.time.delayedCall(2400, () => {
+
+    this.cinematics.playVideo(INTRO_VIDEOS[this.tabSync?.tab ?? 1].key, () => {
       this.tweens.add({
         targets: [title, subtitle], alpha: 0, duration: 400,
         onComplete: () => {
@@ -251,8 +288,9 @@ export class BossRoomScene extends Phaser.Scene {
           subtitle.destroy()
         },
       })
+      this.cinematics.flash()
+      this.spawnBoss(WIDTH / 2, SPAWN_Y)
       this.phase = 'fighting'
-      this.boss.setUltimate(false)
       // Tab 1 owns the server-side match lifecycle (never adopted tabs).
       if (!this.tabSync || this.tabSync.tab === 1) {
         this.game.events.emit('match:start')
@@ -328,7 +366,7 @@ export class BossRoomScene extends Phaser.Scene {
   }
 
   private startUltimate(broadcast: boolean): void {
-    if (this.phase !== 'fighting' || this.ultimatePending) return
+    if (this.phase !== 'fighting' || this.ultimatePending || !this.boss) return
     this.ultimatePending = true
     this.phase = 'ultimate'
     if (broadcast) this.tabSync?.publishFight('ultimate')
@@ -339,6 +377,7 @@ export class BossRoomScene extends Phaser.Scene {
       centerX: WIDTH / 2,
       leftWallX: LEFT_WALL_X,
       rightWallX: RIGHT_WALL_X,
+      wallTopY: WALL_TOP_Y,
     }, () => {
       if (this.phase === 'ultimate') {
         this.phase = 'fighting'
@@ -366,18 +405,86 @@ export class BossRoomScene extends Phaser.Scene {
     this.phase = victory ? 'victory' : 'defeat'
     if (broadcast) this.tabSync?.publishFight(victory ? 'victory' : 'defeat')
 
-    if (victory) {
-      this.boss.setUltimate(true)
+    const boss = this.boss
+    if (victory && boss) {
+      boss.setUltimate(true)
       this.tweens.add({
-        targets: this.boss, alpha: 0, angle: 90, y: '+=40', duration: 1200,
-        onComplete: () => this.boss.destroy(),
+        targets: boss, alpha: 0, angle: 90, y: '+=40', duration: 1200,
+        onComplete: () => boss.destroy(),
       })
     }
     // Every tab shows the outcome; only tab 1 reports it to the server
     // (and never adopted tabs).
     this.game.events.emit('fight:ended', victory)
-    if ((!this.tabSync || this.tabSync.tab === 1) && !this.adopted) {
+    if (this.ownsMatchLifecycle) {
       this.game.events.emit('match:finished', victory)
     }
+    // Defeat keeps the instant overlay; victory earns the send-off first.
+    if (victory) this.runVictoryEndscreen()
+  }
+
+  private get ownsMatchLifecycle(): boolean {
+    return (!this.tabSync || this.tabSync.tab === 1) && !this.adopted
+  }
+
+  /**
+   * Victory send-off: Eevee stays controllable throughout — only the React
+   * overlay is delayed. Flash, one more video backdrop, then the victory
+   * lines fade in one by one; ENDSCREEN_HOLD_MS after the last line the
+   * 'endscreen:done' event releases the overlay.
+   */
+  private runVictoryEndscreen(): void {
+    this.cinematics.flash()
+    this.cinematics.playVideo(ENDSCREEN_VIDEO.key, () => {
+      this.collectVictoryLines((lines) => {
+        this.cinematics.fadeInLines(lines, ENDSCREEN_HOLD_MS,
+          () => this.game.events.emit('endscreen:done'))
+      })
+    })
+  }
+
+  /**
+   * The same text the victory overlay shows, as fade-in lines. The tab that
+   * owns the match waits (briefly) for the server-confirmed stats, which
+   * React pushes into the game as 'victory-stats' / 'victory:stats'.
+   */
+  private collectVictoryLines(onReady: (lines: string[]) => void): void {
+    if (!this.ownsMatchLifecycle) {
+      onReady(['VICTORY', 'The outcome echoes from the other dimension.'])
+      return
+    }
+    const build = (stats: { pointsEarned: number; durationMs: number }) => {
+      const lines = [
+        'VICTORY',
+        'The Twin Constellations fall silent.',
+        `Points earned: ✦ ${stats.pointsEarned}`,
+      ]
+      if (stats.durationMs > 0) lines.push(`Time: ${formatDuration(stats.durationMs)}`)
+      onReady(lines)
+    }
+    const cached = this.registry.get('victory-stats') as
+      { pointsEarned: number; durationMs: number } | undefined
+    if (cached) {
+      build(cached)
+      return
+    }
+    let done = false
+    const onStats = (stats: { pointsEarned: number; durationMs: number }) => {
+      if (done) return
+      done = true
+      build(stats)
+    }
+    this.game.events.once('victory:stats', onStats)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      done = true
+      this.game.events.off('victory:stats', onStats)
+    })
+    // A lost or slow server reply must not stall the ceremony.
+    this.time.delayedCall(VICTORY_STATS_TIMEOUT_MS, () => {
+      if (done) return
+      done = true
+      this.game.events.off('victory:stats', onStats)
+      build({ pointsEarned: 0, durationMs: 0 })
+    })
   }
 }

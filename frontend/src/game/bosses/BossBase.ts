@@ -34,10 +34,10 @@ export interface SpecialAttack {
   execute(boss: BossBase, arena: BossArena): void
 }
 
-const MELEE_RANGE = 110
+const MELEE_RANGE = 130
 const MELEE_DAMAGE = 14
 const WAVE_DAMAGE = 10
-const MOVE_SPEED = 120
+const MOVE_SPEED = 140
 /** Turn-start swoop toward Eevee: fast, but stops at a standoff distance. */
 const APPROACH_SPEED = 360
 const APPROACH_STANDOFF = 100
