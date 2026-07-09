@@ -4,6 +4,7 @@ import type {
   DamageMessage,
   EndedMessage,
   FightMessage,
+  IntroReadyMessage,
   MeleeMessage,
   PoseMessage,
   SessionState,
@@ -25,6 +26,7 @@ export interface TabSyncHandlers {
   onControlChange?: (hasControl: boolean) => void
   onBossHp?: (message: BossHpMessage) => void
   onStar?: (message: StarMessage) => void
+  onIntroReady?: (message: IntroReadyMessage) => void
   onFight?: (message: FightMessage) => void
   onWelcome?: (message: WelcomeMessage) => void
   onEnded?: (message: EndedMessage) => void
@@ -168,6 +170,12 @@ export class TabSync {
     this.transport.post({ type: 'star', tab: this.tab, stars })
   }
 
+  /** This tab's boss room is staged and its tab has been seen once.
+   *  `reply` answers the peer's announcement (replies are not re-answered). */
+  publishIntroReady(reply = false): void {
+    this.transport.post({ type: 'intro-ready', tab: this.tab, reply })
+  }
+
   publishFight(phase: FightMessage['phase']): void {
     this.transport.post({ type: 'fight', tab: this.tab, phase })
   }
@@ -246,6 +254,9 @@ export class TabSync {
         break
       case 'star':
         this.handlers.onStar?.(message)
+        break
+      case 'intro-ready':
+        this.handlers.onIntroReady?.(message)
         break
       case 'fight':
         this.handlers.onFight?.(message)

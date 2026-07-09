@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import Phaser from 'phaser'
+import { gameMusic } from './music'
 import { BootScene } from '../scenes/BootScene'
 import { IntermissionScene } from '../scenes/IntermissionScene'
 import { BossRoomScene } from '../scenes/BossRoomScene'
@@ -30,6 +31,11 @@ const BACKGROUND_STEP_MS = 50
 /** Most elapsed time settled per tick — bounds the catch-up burst after a
  *  stall while keeping the hidden clock glued to real time. */
 const MAX_CATCHUP_MS = 1000
+/** Most wall-clock time one tick may spend stepping. Software-rendered or
+ *  overloaded machines can take 100ms+ per hidden step; an unbounded batch
+ *  would starve the heartbeat past the peer timeout and falsely seal the
+ *  session. Better a slowed hidden sim than a dead one. */
+const MAX_STEP_WALL_MS = 200
 
 /** Mounts the Phaser game and bridges its events into React. */
 export default function PhaserGame({
@@ -111,7 +117,9 @@ export default function PhaserGame({
       lastTickAt = now
       if (document.hidden && !pausedRef.current && gameRef.current) {
         owedMs = Math.min(owedMs + elapsed, MAX_CATCHUP_MS)
-        while (owedMs >= BACKGROUND_STEP_MS && gameRef.current) {
+        const batchStart = performance.now()
+        while (owedMs >= BACKGROUND_STEP_MS && gameRef.current &&
+               performance.now() - batchStart < MAX_STEP_WALL_MS) {
           gameRef.current.step(performance.now(), BACKGROUND_STEP_MS)
           owedMs -= BACKGROUND_STEP_MS
         }
@@ -123,6 +131,7 @@ export default function PhaserGame({
     return () => {
       ticker.terminate()
       window.removeEventListener('focus', claim)
+      gameMusic.stop() // scenes never see this unmount; silence the channel
       // destroy() only queues the teardown for the next frame step. A paused
       // game's loop is asleep (no steps ever run), so the queued destroy
       // would never happen — leaving keyboard capture alive on the next
@@ -145,10 +154,14 @@ export default function PhaserGame({
     pausedRef.current = paused
     const game = gameRef.current
     if (!game) return
+    // SFX are not driven by the game loop, so they pause/resume explicitly.
+    // (Music is GamePage's concern — only terminal overlays silence it.)
     if (paused) {
       game.loop.sleep()
+      game.sound?.pauseAll()
     } else {
       game.loop.wake()
+      game.sound?.resumeAll()
     }
   }, [paused])
 

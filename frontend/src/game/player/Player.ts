@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
 import { selectAbility } from '../core/intents'
+import { playSfx, SFX } from '../core/sfx'
 import { TEX } from '../core/textures'
 import { buildAttackRegistry } from './abilities'
 import type { CastContext } from './AttackPattern'
@@ -16,7 +17,7 @@ const COMBO_DAMAGE = [5, 5, 10]
 const MELEE_REACH = 32
 const MELEE_THICKNESS = 20
 const BLOCK_RADIUS = 46
-const BLOCK_HALF_ANGLE = Phaser.Math.DegToRad(30)
+const BLOCK_HALF_ANGLE = Phaser.Math.DegToRad(25)
 
 export interface PlayerKeys {
   left: Phaser.Input.Keyboard.Key
@@ -330,6 +331,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private spawnSlash(aim: Phaser.Math.Vector2, comboStep: number, remote = false): void {
+    playSfx(this.scene, SFX.meleeWhoosh.key)
     const damage = COMBO_DAMAGE[Math.min(comboStep, 3) - 1]
     // The rectangle starts at Eevee's center and reaches MELEE_REACH out
     // along the aim, so a swing away from a target can never clip it.

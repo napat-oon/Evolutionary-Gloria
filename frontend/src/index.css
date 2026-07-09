@@ -334,6 +334,27 @@ button.secondary,
   font-weight: 600;
 }
 
+.volume-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-shadow: 0 1px 4px #000000c0;
+}
+
+.volume-slider input[type='range'] {
+  width: 5.5rem;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.volume-value {
+  min-width: 2.3em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .hold-button {
   user-select: none;
   touch-action: none;

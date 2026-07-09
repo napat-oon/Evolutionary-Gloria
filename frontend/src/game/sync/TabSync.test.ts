@@ -67,6 +67,21 @@ describe('TabSync control handover', () => {
     expect(seenBy2).toEqual([])
   })
 
+  it('intro-ready reaches only the other dimension, reply flag intact', () => {
+    const [transportA, transportB] = makeTransportPair()
+    const tab1 = new TabSync(1, transportA)
+    const tab2 = new TabSync(2, transportB)
+    const seenBy1: boolean[] = []
+    const seenBy2: boolean[] = []
+    tab1.handlers.onIntroReady = (m) => seenBy1.push(m.reply ?? false)
+    tab2.handlers.onIntroReady = (m) => seenBy2.push(m.reply ?? false)
+
+    tab1.publishIntroReady()
+    tab2.publishIntroReady(true)
+    expect(seenBy2).toEqual([false])
+    expect(seenBy1).toEqual([true])
+  })
+
   it('damage on the puppet tab is forwarded to the controller exactly once', () => {
     const [transportA, transportB] = makeTransportPair()
     const tab1 = new TabSync(1, transportA)

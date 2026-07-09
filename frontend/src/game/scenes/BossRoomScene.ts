@@ -7,9 +7,11 @@ import { Orion, ORION_TINT } from '../bosses/Orion'
 import { Sirius, SIRIUS_TINT } from '../bosses/Sirius'
 import { UltimateSequence } from '../bosses/UltimateSequence'
 import { setupHitboxDebug } from '../core/hitboxDebug'
+import { gameMusic } from '../core/music'
 import { TEX } from '../core/textures'
 import { Player } from '../player/Player'
 import { SceneSync } from '../sync/SceneSync'
+import { otherTab } from '../sync/messages'
 import type { SessionState } from '../sync/messages'
 import type { TabSync } from '../sync/TabSync'
 import { formatDuration } from '../../lib/format'
@@ -37,8 +39,10 @@ type FightPhase = 'intro' | 'fighting' | 'ultimate' | 'victory' | 'defeat'
 const ENDSCREEN_HOLD_MS = 5000
 /** Give the server reply this long to bring the victory stats. */
 const VICTORY_STATS_TIMEOUT_MS = 8000
-/** The twin materialises about one platform above its rest height. */
-const SPAWN_Y = GROUND_Y - 90 - 52
+/** The twin materialises about two platforms above the ground. */
+const SPAWN_Y = GROUND_Y - 180 - 52
+/** How often a gated tab re-announces intro readiness to a peer still loading. */
+const INTRO_READY_REBROADCAST_MS = 600
 
 /** The twins' arena: one boss per dimension, shared HP pool, shared stars. */
 export class BossRoomScene extends Phaser.Scene {
@@ -113,12 +117,16 @@ export class BossRoomScene extends Phaser.Scene {
       wall.setScale(1, 1.5).refreshBody()
     }
 
-    // Jumpable platforms (one-way, droppable with S + Space).
+    // Jumpable platforms (one-way, droppable with S + Space). The 3rd level
+    // is one arena-wide walkway: 144px segments (96px texture × 1.5 scale)
+    // overlapped a little so their rounded end caps don't notch the surface.
+    const walkwayXs: number[] = []
+    for (let x = 72; x < WIDTH + 72; x += 130) walkwayXs.push(x)
     const platforms = this.physics.add.staticGroup()
     const platformRows: Array<[number, number[]]> = [
       [GROUND_Y - 90, [300, 760, 1160, 1620]],
       [GROUND_Y - 180, [520, 960, 1400]],
-      [GROUND_Y - 270, [300, 760, 1160, 1620]],
+      [GROUND_Y - 270, walkwayXs],
       [GROUND_Y - 360, [520, 960, 1400]],
       [GROUND_Y - 450, [300, 960, 1620]],
     ]
@@ -167,13 +175,110 @@ export class BossRoomScene extends Phaser.Scene {
       this.game.events.emit('potions:used', remaining)
     })
 
+    // Whatever the intermission left playing eases out for the cinematic.
+    gameMusic.fadeOut(800)
+
     if (this.adopted && adoptedState) {
       // A late joiner skips the cinematic; its twin is already mid-fight.
       this.spawnBoss(WIDTH - 260, GROUND_Y - 52)
       this.joinRunningFight(adoptedState)
     } else {
-      this.runIntro()
+      this.awaitBothTabsSeen(() => this.runIntro())
     }
+  }
+
+  update(): void {
+    gameMusic.update() // Celestial Clash's jump map runs on the scene clock
+  }
+
+  /**
+   * Holds the intro until both dimensions' tabs have been visible at least
+   * once. Browsers defer video loading (and much of the first render) in a
+   * tab that has never been focused, which stalled the hidden dimension's
+   * intro long past the visible one. The user interaction doubles as a sync
+   * barrier: both tabs release their intros in the same instant.
+   */
+  private awaitBothTabsSeen(onReady: () => void): void {
+    const sync = this.tabSync
+    if (!sync) {
+      onReady()
+      return
+    }
+
+    const veil = this.add
+      .rectangle(VIEW_W / 2, 270, VIEW_W, 540, 0x04050c, 0.78)
+      .setScrollFactor(0)
+      .setDepth(20)
+    const twinName = sync.tab === 2 ? 'Sirius' : 'Orion'
+    const heading = this.add
+      .text(VIEW_W / 2, 236, 'THE TWINS AWAIT', {
+        fontSize: '30px', color: '#e8e6f0', fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(21)
+    const prompt = this.add
+      .text(VIEW_W / 2, 284,
+        `Glance at Dimension ${otherTab(sync.tab)}'s tab — ${twinName} wakes only once witnessed.\n` +
+        'The intro begins in both dimensions together.', {
+          fontSize: '16px', color: '#9aa0b8', align: 'center',
+        })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(21)
+
+    let selfSeen = false
+    let peerSeen = false
+    let started = false
+    const onVisibility = () => announceIfSeen()
+    const cleanup = () => document.removeEventListener('visibilitychange', onVisibility)
+
+    const finish = () => {
+      if (started) return
+      started = true
+      rebroadcast.remove()
+      cleanup()
+      this.events.off(Phaser.Scenes.Events.SHUTDOWN, cleanup)
+      this.tweens.add({
+        targets: [veil, heading, prompt], alpha: 0, duration: 350,
+        onComplete: () => {
+          veil.destroy()
+          heading.destroy()
+          prompt.destroy()
+        },
+      })
+      onReady()
+    }
+    const tryFinish = () => {
+      if (selfSeen && peerSeen) finish()
+    }
+    const announceIfSeen = () => {
+      if (selfSeen || document.visibilityState !== 'visible') return
+      selfSeen = true
+      sync.publishIntroReady()
+      tryFinish()
+    }
+
+    // The handler outlives the gate on purpose: a peer whose scene loaded
+    // late (hidden tabs defer work) still gets an answer after this tab has
+    // already released its intro. Replies are never re-answered.
+    sync.handlers.onIntroReady = (message) => {
+      peerSeen = true
+      if (selfSeen && !message.reply) sync.publishIntroReady(true)
+      tryFinish()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, cleanup)
+    // First announcements can land before the peer's scene listens; repeat
+    // until the peer has been heard from.
+    const rebroadcast = this.time.addEvent({
+      delay: INTRO_READY_REBROADCAST_MS,
+      loop: true,
+      callback: () => {
+        if (selfSeen && !peerSeen) sync.publishIntroReady()
+      },
+    })
+    announceIfSeen()
   }
 
   /** Creates this dimension's twin and wires its physics — the twin only
@@ -252,6 +357,7 @@ export class BossRoomScene extends Phaser.Scene {
   /** Adopted mid-fight: no intro, no server lifecycle — just fall in line. */
   private joinRunningFight(state: SessionState): void {
     this.phase = 'fighting'
+    gameMusic.playBossTheme()
     this.player.setPosition(state.x, state.y)
     this.player.vitals.applySnapshot(state.vitals)
     this.updateBossBar()
@@ -280,7 +386,11 @@ export class BossRoomScene extends Phaser.Scene {
       .setDepth(8)
     this.tweens.add({ targets: [title, subtitle], alpha: 1, duration: 500 })
 
-    this.cinematics.playVideo(INTRO_VIDEOS[this.tabSync?.tab ?? 1].key, () => {
+    // The cutscene sound is a separate file, cut to the clips' length; both
+    // tabs release the intro together, so the host tab's cue lines up with
+    // whichever dimension's clip the player is watching.
+    gameMusic.playIntroCue()
+    this.cinematics.playVideo(INTRO_VIDEOS[this.tabSync?.tab ?? 1], () => {
       this.tweens.add({
         targets: [title, subtitle], alpha: 0, duration: 400,
         onComplete: () => {
@@ -291,6 +401,7 @@ export class BossRoomScene extends Phaser.Scene {
       this.cinematics.flash()
       this.spawnBoss(WIDTH / 2, SPAWN_Y)
       this.phase = 'fighting'
+      gameMusic.playBossTheme()
       // Tab 1 owns the server-side match lifecycle (never adopted tabs).
       if (!this.tabSync || this.tabSync.tab === 1) {
         this.game.events.emit('match:start')
@@ -404,6 +515,9 @@ export class BossRoomScene extends Phaser.Scene {
     if (this.phase === 'victory' || this.phase === 'defeat') return
     this.phase = victory ? 'victory' : 'defeat'
     if (broadcast) this.tabSync?.publishFight(victory ? 'victory' : 'defeat')
+    // Fallen twins earn the song's outro; a defeat lets it slip away.
+    if (victory) gameMusic.playBossOutro()
+    else gameMusic.fadeOut()
 
     const boss = this.boss
     if (victory && boss) {
@@ -435,7 +549,7 @@ export class BossRoomScene extends Phaser.Scene {
    */
   private runVictoryEndscreen(): void {
     this.cinematics.flash()
-    this.cinematics.playVideo(ENDSCREEN_VIDEO.key, () => {
+    this.cinematics.playVideo(ENDSCREEN_VIDEO, () => {
       this.collectVictoryLines((lines) => {
         this.cinematics.fadeInLines(lines, ENDSCREEN_HOLD_MS,
           () => this.game.events.emit('endscreen:done'))

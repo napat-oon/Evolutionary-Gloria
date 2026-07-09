@@ -85,6 +85,19 @@ export interface StarMessage {
   stars: StarColor[]
 }
 
+/**
+ * The boss room on `tab` is staged and its tab has been seen (visible at
+ * least once). The intros hold until both dimensions have announced this —
+ * browsers defer video loading in tabs that were never focused, so starting
+ * blind desyncs the cinematics. `reply` marks an answer to the peer's
+ * announcement; replies are never re-answered, which ends the exchange.
+ */
+export interface IntroReadyMessage {
+  type: 'intro-ready'
+  tab: TabId
+  reply?: boolean
+}
+
 /** Fight lifecycle mirrored across tabs. */
 export interface FightMessage {
   type: 'fight'
@@ -143,6 +156,7 @@ export type SyncMessage =
   | ControlMessage
   | BossHpMessage
   | StarMessage
+  | IntroReadyMessage
   | FightMessage
   | HelloMessage
   | WelcomeMessage
@@ -150,8 +164,8 @@ export type SyncMessage =
   | PingMessage
 
 const MESSAGE_TYPES = new Set([
-  'pose', 'cast', 'melee', 'windup', 'damage', 'control', 'boss-hp', 'star', 'fight',
-  'hello', 'welcome', 'ended', 'ping',
+  'pose', 'cast', 'melee', 'windup', 'damage', 'control', 'boss-hp', 'star', 'intro-ready',
+  'fight', 'hello', 'welcome', 'ended', 'ping',
 ])
 
 export function isSyncMessage(value: unknown): value is SyncMessage {

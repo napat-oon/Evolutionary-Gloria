@@ -3,21 +3,20 @@ import type { TabId } from '../sync/messages'
 
 /**
  * Cinematic clips. Each dimension gets its own intro; the endscreen is
- * shared. All three point at the placeholder until the real footage lands —
- * swap the URLs here, nothing else references the files.
+ * shared. `durationMs` is the clip's authored length and is what actually
+ * times the cinematic — keep it in sync when swapping footage. Keep files
+ * faststart .mp4 — Phaser's loader rejects .mov by extension (crashes the
+ * scene), and a trailing moov atom stalls streamed playback.
  */
-export const INTRO_VIDEOS: Record<TabId, { key: string; url: string }> = {
-  1: { key: 'cinematic-intro-sirius', url: '/placeholder-video.mp4' },
-  2: { key: 'cinematic-intro-orion', url: '/placeholder-video.mp4' },
+export const INTRO_VIDEOS: Record<TabId, { key: string; url: string; durationMs: number }> = {
+  1: { key: 'cinematic-intro-sirius', url: '/videos/sirius-intro.mp4', durationMs: 8670 },
+  2: { key: 'cinematic-intro-orion', url: '/videos/orion-intro.mp4', durationMs: 8670 },
 }
-export const ENDSCREEN_VIDEO = { key: 'cinematic-endscreen', url: '/placeholder-video.mp4' }
+export const ENDSCREEN_VIDEO =
+  { key: 'cinematic-endscreen', url: '/videos/sirius-orion-outro.mp4', durationMs: 16080 }
 
 const FLASH_MS = 400
 const LINE_FADE_MS = 1000
-/** Failsafe: a clip whose duration never resolves must not stall the fight. */
-const VIDEO_FAILSAFE_MS = 20000
-/** Clock grace over the clip duration, so a playing video ends itself. */
-const CLOCK_SLACK_MS = 250
 
 /**
  * Presentation helpers for the boss room's intro and victory cinematics:
@@ -41,52 +40,31 @@ export class BossCinematics {
 
   /**
    * Plays the clip once in place of the background (pinned to the camera
-   * view, behind the arena), then calls onDone.
-   *
-   * The scene clock — not the video element — decides when the cinematic is
-   * over: browsers defer muted playback in hidden tabs, but the worker
-   * heartbeat keeps stepping a hidden game, so both dimensions run their
-   * intros simultaneously whether or not their tab is focused. The element
-   * is best-effort visuals on top; a missing or broken clip falls through.
+   * view, behind the arena), then calls onDone after `durationMs` — the
+   * clip's authored length, on the scene clock. The video element is pure
+   * best-effort visuals: hidden tabs may refuse to play it at all (both
+   * intros still take the same time and the dimensions stay in step), and
+   * a missing or broken clip just leaves the plain background.
    */
-  playVideo(key: string, onDone: () => void): void {
+  playVideo(clip: { key: string; durationMs: number }, onDone: () => void): void {
     const scene = this.scene
-    if (!scene.cache.video.exists(key)) {
-      onDone()
-      return
-    }
+    scene.time.delayedCall(clip.durationMs, onDone)
+    if (!scene.cache.video.exists(clip.key)) return
+
     const width = scene.scale.width
     const height = scene.scale.height
-    const video = scene.add.video(width / 2, height / 2, key)
+    const video = scene.add.video(width / 2, height / 2, clip.key)
       .setScrollFactor(0)
       .setDepth(-5)
     video.setDisplaySize(width, height)
     // The real frame size arrives with the texture; re-stretch to the view.
     video.on('created', () => video.setDisplaySize(width, height))
-
-    let finished = false
-    let clock: Phaser.Time.TimerEvent | undefined
-    const finish = () => {
-      if (finished) return
-      finished = true
-      failsafe.remove()
-      clock?.remove()
-      video.destroy()
-      onDone()
+    const clear = () => {
+      if (video.active) video.destroy()
     }
-    const failsafe = scene.time.delayedCall(VIDEO_FAILSAFE_MS, finish)
-    // Arm the master clock as soon as the clip's duration is known.
-    const armClock = () => {
-      const seconds = video.getDuration()
-      if (!clock && Number.isFinite(seconds) && seconds > 0) {
-        clock = scene.time.delayedCall(seconds * 1000 + CLOCK_SLACK_MS, finish)
-      }
-    }
-    armClock()
-    video.on('metadata', armClock)
-    video.on('created', armClock)
-    video.on('complete', finish) // a clip that really played ends itself
-    video.on('error', finish)
+    video.on('complete', clear)
+    video.on('error', clear)
+    scene.time.delayedCall(clip.durationMs, clear)
     video.play()
   }
 

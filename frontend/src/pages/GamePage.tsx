@@ -5,10 +5,12 @@ import type { UserResponse } from '../app/api'
 import { useAuth } from '../app/AuthContext'
 import { SESSION_CHANNEL } from '../app/AuthContext'
 import PhaserGame from '../game/core/PhaserGame'
+import { gameMusic } from '../game/core/music'
 import { otherTab, TAB_BOSS_COLOR } from '../game/sync/messages'
 import type { TabId } from '../game/sync/messages'
 import { BroadcastChannelTransport } from '../game/sync/SyncTransport'
 import { TabSync } from '../game/sync/TabSync'
+import { getAudioSettings, setAudioSetting, subscribeAudioSettings } from '../lib/audioSettings'
 import { formatDuration } from '../lib/format'
 
 const POTION_PRICE = 50
@@ -62,6 +64,39 @@ function HoldButton({ onComplete, children }: { onComplete: () => void; children
   )
 }
 
+/** 0–100% volume slider bound to the shared audio settings store. */
+function VolumeSlider({ kind, label }: { kind: 'music' | 'sfx'; label: string }) {
+  const [percent, setPercent] = useState(() => Math.round(getAudioSettings()[kind] * 100))
+
+  // Follow changes from the other tab (settings mirror via storage events).
+  useEffect(
+    () => subscribeAudioSettings((settings) => setPercent(Math.round(settings[kind] * 100))),
+    [kind],
+  )
+
+  return (
+    <label className="volume-slider">
+      <span className="volume-label">{label}</span>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={percent}
+        aria-label={`${label} volume`}
+        onChange={(event) => {
+          const value = Number(event.currentTarget.value)
+          setPercent(value)
+          setAudioSetting(kind, value / 100)
+        }}
+        // A focused slider would eat SPACE and the arrow keys — game inputs.
+        onPointerUp={(event) => event.currentTarget.blur()}
+      />
+      <span className="volume-value">{percent}%</span>
+    </label>
+  )
+}
+
 export default function GamePage() {
   const { user, refreshUser } = useAuth()
   const navigate = useNavigate()
@@ -97,6 +132,21 @@ export default function GamePage() {
     setTabSync(sync)
     return () => sync.dispose()
   }, [tab])
+
+  // Tab 1 hosts the session's music (unmuted audio keeps playing in a
+  // background tab, so it stays audible from either dimension — and split
+  // views can't double it). It starts right away, not from the scene: the
+  // strict-duo overlay pauses the game loop until tab 2 arrives, but the
+  // user shouldn't wait in silence.
+  useEffect(() => {
+    gameMusic.setEnabled(tab === 1)
+    if (tab === 1) gameMusic.playIntermissionTheme()
+  }, [tab])
+
+  // Terminal overlays silence the music; the waiting overlay does not.
+  useEffect(() => {
+    gameMusic.setSuspended(loggedOut || endedReason !== null)
+  }, [loggedOut, endedReason])
 
   // A logout anywhere (any tab) pauses this game and overlays a notice.
   useEffect(() => {
@@ -261,6 +311,8 @@ export default function GamePage() {
         </span>
       </div>
       <div className="corner corner-tr">
+        <VolumeSlider kind="music" label="Music" />
+        <VolumeSlider kind="sfx" label="SFX" />
         <span className="game-points">✦ {points} points</span>
         {/* Only the primary dimension can leave; other tabs are pure mirrors. */}
         {tab === 1 && <HoldButton onComplete={leaveToLobby}>Lobby (hold)</HoldButton>}

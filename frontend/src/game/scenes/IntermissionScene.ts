@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
 import { setupHitboxDebug } from '../core/hitboxDebug'
+import { gameMusic } from '../core/music'
 import { TEX } from '../core/textures'
 import { Player } from '../player/Player'
 import { SceneSync } from '../sync/SceneSync'
@@ -50,6 +51,7 @@ export class IntermissionScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
     this.cameras.main.setBackgroundColor('#0b0d17')
     setupHitboxDebug(this)
+    gameMusic.playIntermissionTheme()
 
     // Ground and platforms
     const solids = this.physics.add.staticGroup()
@@ -134,6 +136,27 @@ export class IntermissionScene extends Phaser.Scene {
       this.registry.set('potions', this.player.vitals.potions)
       this.scene.start('boss-room')
     })
+
+    // Playstyle guidance: split-view keeps both tabs visible, which is the
+    // only mode where browsers let both cutscenes play at once. Font sizes
+    // live in each block's fontSize below — tweak them there.
+    this.add.text(120, 168, '(For the best visual experience)',
+      { fontSize: '13px', color: '#f0c34e', fontStyle: 'bold' })
+    this.add.text(120, 190,
+      'RECOMMENDED: Play two tabs using SPLIT-VIEW feature, OR manually move one tab to the '
+      + 'left or right edge of the screen to display the tab in half-screen, then choose the '
+      + 'other tab to display the other half',
+      {
+        fontSize: '17px', color: '#ffffff', fontStyle: 'bold', align: 'left',
+        wordWrap: { width: 760 },
+      })
+    this.add.text(120, 262,
+      'OPTIONAL: If you choose to focus display only ONE tab on the screen, it is advised '
+      + 'to NOT CHANGE TABS while cutscenes are ongoing',
+      {
+        fontSize: '13px', color: '#b9bed3', fontStyle: 'bold', align: 'left',
+        wordWrap: { width: 760 },
+      })
 
     this.add
       .text(120, 340, 'A/D move · SPACE jump · S+SPACE drop · SHIFT dash · LMB combo · mouse aims the shield arc\nRMB elemental (hold W/S/move for variants, V for the second set) · R potion',

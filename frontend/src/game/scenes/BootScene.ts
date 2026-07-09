@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { preloadSfx } from '../core/sfx'
 import { makePlaceholderTextures } from '../core/textures'
 import type { TabSync } from '../sync/TabSync'
 
@@ -10,6 +11,10 @@ import type { TabSync } from '../sync/TabSync'
 export class BootScene extends Phaser.Scene {
   constructor() {
     super('boot')
+  }
+
+  preload(): void {
+    preloadSfx(this)
   }
 
   create(): void {
