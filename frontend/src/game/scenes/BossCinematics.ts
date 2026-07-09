@@ -19,6 +19,35 @@ const FLASH_MS = 400
 const LINE_FADE_MS = 1000
 
 /**
+ * Streams this dimension's clips into the browser's HTTP cache during the
+ * intermission, so a first-ever playthrough on a cold machine doesn't
+ * stutter its cinematics while ~80MB trickles in mid-scene. The video
+ * elements later replay the same URLs straight from cache. Intro first (it
+ * plays first); the shared endscreen is fetched by tab 1 only — the cache
+ * is browser-wide, so tab 2's element hits it too. Best-effort: a failed
+ * or unfinished warm-up just means the clip streams on demand as before.
+ */
+let cacheWarmed = false
+export function warmCinematicCache(tab: TabId): void {
+  if (cacheWarmed) return // intermission restarts must not re-download
+  cacheWarmed = true
+  const urls = [INTRO_VIDEOS[tab].url]
+  if (tab === 1) urls.push(ENDSCREEN_VIDEO.url)
+  void (async () => {
+    for (const url of urls) {
+      try {
+        // Drain the stream instead of buffering a blob: the HTTP cache is
+        // filled as bytes arrive, and 80MB never sits in JS memory.
+        const reader = (await fetch(url)).body?.getReader()
+        while (reader && !(await reader.read()).done) { /* draining */ }
+      } catch {
+        // Preloading is opportunistic; playback still streams on demand.
+      }
+    }
+  })()
+}
+
+/**
  * Presentation helpers for the boss room's intro and victory cinematics:
  * full-view video backdrops, twin-colored screen flashes, and line-by-line
  * text reveals. Owns no fight state — the scene drives it.

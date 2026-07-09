@@ -5,6 +5,7 @@ import { TEX } from '../core/textures'
 import { Player } from '../player/Player'
 import { SceneSync } from '../sync/SceneSync'
 import type { TabSync } from '../sync/TabSync'
+import { warmCinematicCache } from './BossCinematics'
 
 const WORLD_WIDTH = 1920
 const WORLD_HEIGHT = 540
@@ -88,6 +89,9 @@ export class IntermissionScene extends Phaser.Scene {
     if (tabSync) {
       new SceneSync(this, this.player, tabSync)
     }
+    // Pull the boss-room cinematics into the browser cache while the player
+    // shops — a cold first playthrough would otherwise stutter its clips.
+    warmCinematicCache(tabSync?.tab ?? 1)
 
     // Shop pad
     this.add.image(300, GROUND_Y - 5, TEX.shopPad)
