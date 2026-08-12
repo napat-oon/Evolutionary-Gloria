@@ -34,8 +34,36 @@ Project details:
 
 ---
 
+### The Gimmick: One Player, Two Dimensions
+- **One shared character**: whatever Player does in the focused tab is mirrored live into the other
+- Twin bosses share a single HP pool — you must fight both dimensions at once
+- **Strict duo rule**: the fight only runs while both tabs are open and alive
+- _(This is the first and the worst design decision out of all my mistakes, that I highly need to address this)_
+  - The Duo-tab gimmick came from me challenging myself thinking I could replicate multiple different instances of game interacting synchronously with each other (similar to an application game with multiple "dimensions" that require attention on both instances) for a deployed browser.
+  - You may call it "Scope Creep" or "Poor Planning" because I was mainly blinded by "how could I make a game to look 'complex' enough (for the final project)?" and failed to realize, until half-way through the challenges encountered, that what I was doing were fighting the Browser Optimization or Browser's limitation with foreground & background tabs.
+  - Since I was quite late to notice this design choice, with little time left, I had to try and do my best by circumventing said limitation.
+  - If you ask me what I would do if I were not bound by time constraint, I would rather go back to step 1 in planning the game (not necessarily fully scrapping the whole game and asset) and revolve it around a normal one-tab browser game. (Mainly because I was planning the game as if it were an application, not as a browser game, which caused the "unforeseen" issues that regular browser developers would know first-hand).
+  - Never have I thought how different a browser game would be from an application game so this was a valuable, but also silly lesson about browser games. 
+
 <details>
-  <summary><b>Click to expand "How to run the game locally" (TUNING.md)</b></summary>
+  <summary><b>Click to expand a rough sketch of the gimmick</b></summary>
+<img width="1920" height="842" alt="image" src="https://github.com/user-attachments/assets/7199e48f-f099-4817-a06f-953a99494fc8" />
+</details>
+
+<details>
+  <summary><b>Click to expand the main issue in trying to make a browser game with the chosen gimmick</b></summary>
+<img width="1920" height="926" alt="image" src="https://github.com/user-attachments/assets/b9e06d9b-5fe6-47f8-8f57-379d350c7811" />
+</details>
+
+<details>
+  <summary><b>Click to expand a few bugs/glitches/issues found during development</b></summary>
+<img width="1920" height="929" alt="image" src="https://github.com/user-attachments/assets/3b636289-25f2-4962-b048-2bf6c514c908" />
+</details>
+
+---
+
+<details>
+  <summary><b>Click to expand "How to run the game locally and configure the variables" (TUNING.md)</b></summary>
 
   # Balance tuning guide
 
