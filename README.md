@@ -1,7 +1,9 @@
 # Evolutionary Gloria
 ## ssc-y25t3-project-let-me-solo-you
 
-The final game project made in under 2 weeks. (I was given 1 month, and a few more days for announcement/preparation in advance, but I was so intrigued at extending Zork game so the time decision was poor in this case).
+_DISCLAIMER: Eevee is from Pokémon, and Sirius & Orion are from Warframe. You may view this as a fan project made for the game project that I intended to try. I am not the owner nor the creator of the assets, such as the background art, music, sound, and videos (aside from video edits)._
+
+The final game project was made in under 2 weeks. (I was given 1 month, and a few more days for announcement/preparation in advance, but I was so intrigued at extending Zork game so the time decision was poor in this case).
 
 The primary idea does not expect a fully completed product. Instead, it's evaluated by the effort I have put into the project over the past four weeks and what I have learned from using agentic coding tools or writing the code myself. 
 
@@ -14,7 +16,7 @@ The project presentation focuses on:
 - The algorithms, techniques, or solutions I've used to solve problems.
 - What I've learned throughout the development process.
 
-The number of features the product has will not be interested in. Modern AI tools can generate features with minimal effort. What matters is the understanding of the problem, the engineering decisions, and the work effort I put into the project.
+The number of features the product has will not be of interest. Modern AI tools can generate features with minimal effort. What matters is the understanding of the problem, the engineering decisions, and the work effort I put into the project.
 
 Finally, the project is deployed to a server using a CI/CD pipeline, with Automatic deployment.
 
@@ -39,11 +41,11 @@ Project details:
 - Twin bosses share a single HP pool — you must fight both dimensions at once
 - **Strict duo rule**: the fight only runs while both tabs are open and alive
 - _(This is the first and the worst design decision out of all my mistakes, that I highly need to address this)_
-  - The Duo-tab gimmick came from me challenging myself thinking I could replicate multiple different instances of game interacting synchronously with each other (similar to an application game with multiple "dimensions" that require attention on both instances) for a deployed browser.
-  - You may call it "Scope Creep" or "Poor Planning" because I was mainly blinded by "how could I make a game to look 'complex' enough (for the final project)?" and failed to realize, until half-way through the challenges encountered, that what I was doing were fighting the Browser Optimization or Browser's limitation with foreground & background tabs.
+  - The Duo-tab gimmick came from me challenging myself, thinking I could replicate multiple different instances of the game interacting synchronously with each other (similar to an application game with multiple "dimensions" that require attention on both instances) for a deployed browser.
+  - You may call it "Scope Creep" or "Poor Planning" because I was mainly blinded by "how could I make a game to look 'complex' enough (for the final project)?" and failed to realize, until halfway through the challenges encountered, that what I was doing were fighting the Browser Optimization or the browser's limitation with foreground & background tabs.
   - Since I was quite late to notice this design choice, with little time left, I had to try and do my best by circumventing said limitation.
-  - If you ask me what I would do if I were not bound by time constraint, I would rather go back to step 1 in planning the game (not necessarily fully scrapping the whole game and asset) and revolve it around a normal one-tab browser game. (Mainly because I was planning the game as if it were an application, not as a browser game, which caused the "unforeseen" issues that regular browser developers would know first-hand).
-  - Never have I thought how different a browser game would be from an application game so this was a valuable, but also silly lesson about browser games. 
+  - If you ask me what I would do if I were not bound by time constraints, I would rather go back to step 1 in planning the game (not necessarily fully scrapping the whole game and assets) and revolve it around a normal one-tab browser game. (Mainly because I was planning the game as if it were an application, not as a browser game, which caused the "unforeseen" issues that regular browser developers would know first-hand).
+  - Never have I thought how different a browser game would be from an application game, so this was a valuable, but also silly lesson about browser games. 
 
 <details>
   <summary><b>Click to expand a rough sketch of the gimmick</b></summary>
@@ -276,3 +278,10 @@ Project details:
 <img alt="kaminokefusa sprigatito" src="https://static1.e926.net/data/e2/a7/e2a7dad97b9a760c39676695d5aae39d.jpg" />
 
 (The images are made by kaminokefusa. I am not the artist of the images, nor are we associated by any kinds. These images were put in as a funny gig/placeholder when the Git was created for the game project).
+
+Eevee and Evolutions by TAPI岡 (wolftapioca) (Main background image)
+Eevee and Umbreon by otakuap (Leaderboard background image)
+
+Sirius & Orion Images are created by Warframe, Digital Extremes, and edited for the assets by me.
+Music: "Sacred Light" & "Celestial Clash" from Warframe, Digital Extremes.
+Original Videos are edited from: "Warframe | Jade Shadows: Constellations Official Gameplay Trailer - Available Now On All Platforms!", "Warframe | SIRIUS/ORION: Jade Shadows: Constellations - Official Animated Short", and in-game footage.
