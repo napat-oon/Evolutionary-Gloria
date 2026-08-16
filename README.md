@@ -64,6 +64,11 @@ Project details:
 
 ---
 
+### System Prerequisites
+1. **Java Development Kit (JDK) 21** — To compile and run the backend.
+2. **Apache Maven** — To execute the `mvn` command pipeline and resolve project plugins.
+3. **Node.js (includes NPM)** — Required to recognize and execute the `npm` command and run a JavaScript frontend.
+
 <details>
   <summary><b>Click to expand "How to run the game locally and configure the variables" (TUNING.md)</b></summary>
 
