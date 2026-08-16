@@ -279,9 +279,9 @@ Project details:
 
 (The images are made by kaminokefusa. I am not the artist of the images, nor are we associated by any kinds. These images were put in as a funny gig/placeholder when the Git was created for the game project).
 
-Eevee and Evolutions by TAPI岡 (wolftapioca) (Main background image)
+Eevee and Evolutions by TAPI岡 (wolftapioca) (Main background image) \
 Eevee and Umbreon by otakuap (Leaderboard background image)
 
-Sirius & Orion Images are created by Warframe, Digital Extremes, and edited for the assets by me.
-Music: "Sacred Light" & "Celestial Clash" from Warframe, Digital Extremes.
+Sirius & Orion Images are created by Warframe, Digital Extremes, and edited for the assets by me. \
+Music: "Sacred Light" & "Celestial Clash" from Warframe, Digital Extremes. \
 Original Videos are edited from: "Warframe | Jade Shadows: Constellations Official Gameplay Trailer - Available Now On All Platforms!", "Warframe | SIRIUS/ORION: Jade Shadows: Constellations - Official Animated Short", and in-game footage.
