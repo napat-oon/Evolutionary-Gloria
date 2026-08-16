@@ -201,6 +201,70 @@ Project details:
 
 ---
 
+<details>
+  <summary>Click to expand a list of videos for the game <b>Title/Login, Register, and Lobby screens</b></summary>
+  
+  https://github.com/user-attachments/assets/0a998f10-6eb7-4d30-9148-67ec1c1997ae
+
+  https://github.com/user-attachments/assets/e3451d55-9437-4b7a-9a16-b646b8f47881
+  
+</details>
+
+<details>
+  <summary>Click to expand a list of showcase videos for the game's Player <b>movement and attacks</b></summary>
+
+  https://github.com/user-attachments/assets/9941c429-4a9c-473e-992c-1ee6c6571333
+  
+  https://github.com/user-attachments/assets/fb70d299-1868-4164-a1bd-d286f666732e
+
+  https://github.com/user-attachments/assets/788d1869-15fc-4135-b161-92e86902afb3
+
+  https://github.com/user-attachments/assets/40818a34-106f-4f23-8748-383e332f8311
+
+  https://github.com/user-attachments/assets/7f5ffed5-65ee-4ae8-9f70-094a71f0c86b
+
+  https://github.com/user-attachments/assets/2a253b86-1d1b-4e6a-bec2-3137c221f2dc
+
+</details>
+
+<details>
+  <summary>Click to expand a list of videos for the <b>in-game videos</b> <i>(these often fail to load in demo because the videos are 4K and I didn't force a loading screen)</i></summary>
+
+  https://github.com/user-attachments/assets/e2e5c886-548b-4717-9798-0ae39d377bc8
+
+  https://github.com/user-attachments/assets/efd8fd09-1794-47eb-8a06-7f16c4bed65b
+
+  https://github.com/user-attachments/assets/e51a61ae-f9ff-4d2d-99bc-fd80153d0674
+
+</details>
+
+<details>
+  <summary>Click to expand a video for buying and using <b>Potion</b></summary>
+
+  https://github.com/user-attachments/assets/073aaf90-fbfb-483f-81f1-b6999927d33f
+
+</details>
+
+<details>
+  <summary>Click to expand a list of videos for <b>countering</b> (including a fail example) <b>the Bosses' Ultimate</b> <i>(I'm informed by my tester friend that it is a little too hard or lacks guidance, which I agreed)</i></summary> 
+
+  https://github.com/user-attachments/assets/096c8747-08dd-4990-8e2c-0eae95095c0a
+
+  https://github.com/user-attachments/assets/a30af5e6-9d65-4f97-b470-182fab5580cd
+  
+  https://github.com/user-attachments/assets/7f704dfd-3725-4b71-9a77-259d34ed50b3
+
+</details>
+
+<details>
+  <summary>Click to expand a video of the <b>leaderboard updating</b></summary>
+  
+  https://github.com/user-attachments/assets/9f3bd285-f325-4951-8077-d3a615fb248b
+
+</details>
+
+---
+
 <img alt="tontaro eevee animated" src="https://static1.e926.net/data/e1/0e/e10e13b76ad749ab40e9f98dd620537b.gif" />
 
 <img alt="tontaro sprigatito animated" src="https://static1.e926.net/data/f2/c8/f2c8e6af8eda2d81d22fefd7fa0cadfb.gif" />
